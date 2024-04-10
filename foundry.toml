@@ -5,13 +5,18 @@ libs = ["lib"]
 solc_version = "0.8.25"
 optimizer = true
 optimizer-runs = 10_000
+verbosity = 3
+evm_version = "cancun"
 
 remappings = [
-  "forge-std=lib/forge-std/",
+  "forge-std=lib/forge-std/src/",
   "solady=lib/solady/src/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
-  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
 ]
 
 [fmt]
 bracket_spacing = true
+
+[fuzz]
+runs = 10
