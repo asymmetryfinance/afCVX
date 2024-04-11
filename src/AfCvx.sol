@@ -262,7 +262,12 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     function _stakedCvxStrategyAssets() private view returns (uint256) {
         uint256 staked = CVX_REWARDS_POOL.balanceOf(address(this));
         uint256 rewards = CVX_REWARDS_POOL.earned(address(this));
-        return staked + (rewards == 0 ? 0 : (rewards - _mulBps(rewards, protocolFeeBps)));
+        if (rewards != 0) {
+            // Staked CVX rewards are paid in cvxCRV, convert cvxCRV to CVX for calculations
+            rewards = Zap.convertCvxCrvToCvx(rewards);
+            rewards -= _mulBps(rewards, protocolFeeBps);
+        }
+        return staked + rewards;
     }
 
     function _cleverCvxStrategyAssets() private view returns (uint256) {

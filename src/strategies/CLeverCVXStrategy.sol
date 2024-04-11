@@ -23,10 +23,9 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     uint256 private constant REWARDS_DURATION = 1 weeks;
 
     address public immutable manager;
-    /// @dev Tracks the total amount of CVX unlock obligations the contract has ever had.
-    uint128 internal cumulativeUnlockObligations;
-    /// @dev Tracks the total amount of CVX that has ever been unlocked.
-    uint128 internal cumulativeUnlocked;
+
+    /// @notice The total amount of CVX unlock obligations.
+    uint256 internal unlockObligations;
 
     mapping(address account => mapping(uint256 unlockEpoch => uint256 amount)) public pendingUnlocks;
 
@@ -55,7 +54,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnance, uint256 realisedFurnance) = FURNACE.getUserInfo(address(this));
 
-        deposited = CVX.balanceOf(address(this)) + depositedClever - borrowedClever + unrealisedFurnance;
+        deposited = depositedClever - borrowedClever + unrealisedFurnance - unlockObligations;
         rewards = realisedFurnance;
     }
 
@@ -143,7 +142,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     /// @notice requests to unlock CVX
     function requestUnlock(uint256 amount, address account) external onlyManager returns (uint256 unlockEpoch) {
-        cumulativeUnlockObligations += uint128(amount);
+        unlockObligations += amount;
         (EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
         uint256 locksLength = locks.length;
         for (uint256 i; i < locksLength; i++) {
@@ -189,28 +188,24 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     function repay() external onlyManager {
-        uint256 unlockAmount = _getUnlockAmount();
-        if (unlockAmount != 0) {
-            (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(unlockAmount);
+        uint256 amount = unlockObligations;
+        if (amount != 0) {
+            (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
             FURNACE.withdraw(address(this), repayAmount + repayFee);
             CLEVER_CVX_LOCKER.repay(0, repayAmount);
         }
     }
 
     function unlock() external onlyManager {
-        uint256 unlockAmount = _getUnlockAmount();
-        if (unlockAmount != 0) {
-            cumulativeUnlocked += uint128(unlockAmount);
-            CLEVER_CVX_LOCKER.unlock(unlockAmount);
+        uint256 amount = unlockObligations;
+        if (amount != 0) {
+            unlockObligations = 0;
+            CLEVER_CVX_LOCKER.unlock(amount);
         }
     }
 
     /// @dev Allows the owner of the contract to upgrade to *any* new address.
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner { }
-
-    function _getUnlockAmount() private view returns (uint256) {
-        return cumulativeUnlockObligations - cumulativeUnlocked;
-    }
 
     function _calculateMaxBorrowAmount() private view returns (uint256) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
