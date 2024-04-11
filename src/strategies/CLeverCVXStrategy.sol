@@ -52,10 +52,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     function totalValue() public view returns (uint256 deposited, uint256 rewards) {
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        (uint256 unrealisedFurnance, uint256 realisedFurnance) = FURNACE.getUserInfo(address(this));
+        (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
 
-        deposited = depositedClever - borrowedClever + unrealisedFurnance - unlockObligations;
-        rewards = realisedFurnance;
+        deposited = depositedClever - borrowedClever + unrealisedFurnace - unlockObligations;
+        rewards = realisedFurnace;
     }
 
     function previewUnlocks(uint256 amount) external view returns (EpochUnlockInfo[] memory unlocks) {
@@ -126,12 +126,12 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
-    /// @notice borrows maximum amount of clevCVX and deposits it to Furnance
+    /// @notice borrows maximum amount of clevCVX and deposits it to Furnace
     function borrow() external onlyManager {
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
-    /// @notice claims all realised CVX from Furnance
+    /// @notice claims all realised CVX from Furnace
     /// @return rewards amount of realised CVX
     function claim() external onlyManager returns (uint256 rewards) {
         (, rewards) = FURNACE.getUserInfo(address(this));

@@ -173,7 +173,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
     }
 
-    /// @notice Harvest pending rewards from Convex and Furnance,
+    /// @notice Harvest pending rewards from Convex and Furnace,
     ///         calculates maximum withdraw amount for the current epoch.
     /// @dev Should be called at the beginning of each epoch.
     ///      Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards.
