@@ -48,7 +48,6 @@ library Zap {
     function convertCvxCrvToCvx(uint256 cvxCrvAmount) external view returns (uint256) {
         // cvxCRV -> CRV
         uint256 crvAmount = cvxCrvAmount.mulWad(ICurveFactoryPlainPool(CVXCRV_CRV_POOL).price_oracle());
-        console.log(crvAmount);
 
         // CRV -> ETH
         uint256 ethUsdPrice = ICurveCryptoPool(CRV_ETH_POOL).price_oracle(0);

@@ -77,8 +77,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
     function getAvailableAssets() public view returns (uint256 unlocked, uint256 lockedInClever, uint256 staked) {
         unlocked = CVX.balanceOf(address(this));
-        lockedInClever = _stakedCvxStrategyAssets();
-        staked = _cleverCvxStrategyAssets();
+        lockedInClever = _cleverCvxStrategyAssets();
+        staked = _stakedCvxStrategyAssets();
     }
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool

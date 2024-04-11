@@ -20,3 +20,6 @@ bracket_spacing = true
 
 [fuzz]
 runs = 10
+
+[rpc_endpoints]
+ethereum = "${ETHEREUM_RPC_URL}"
