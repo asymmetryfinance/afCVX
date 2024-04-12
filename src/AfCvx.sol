@@ -2,7 +2,7 @@
 pragma solidity 0.8.25;
 
 import { Ownable } from "solady/auth/Ownable.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
@@ -19,10 +19,8 @@ import { ICleverCvxStrategy } from "./interfaces/afCvx/ICleverCvxStrategy.sol";
 import { CVX } from "./interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "./interfaces/convex/ICvxRewardsPool.sol";
 import { Zap } from "./utils/Zap.sol";
-
 contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
     using SafeTransferLib for address;
-    using Math for uint256;
 
     uint256 internal constant BASIS_POINT_SCALE = 10000;
 
@@ -49,14 +47,15 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         cleverCvxStrategy = ICleverCvxStrategy(strategy);
     }
 
-    function initialize(address initialOwner, address feeCollector) external payable initializer {
+    function initialize(address _owner, address _operator, address _feeCollector) external payable initializer {
         string memory name_ = "Asymmetry Finance afCVX";
         __ERC20_init(name_, "afCVX");
         __ERC4626_init(CVX);
         __ERC20Permit_init(name_);
         __UUPSUpgradeable_init();
-        _initializeOwner(initialOwner);
-        protocolFeeCollector = feeCollector;
+        _initializeOwner(_owner);
+        operator = _operator;
+        protocolFeeCollector = _feeCollector;
         // 80% is deposited to Clever and 20% is staked on Convex
         cleverStrategyShareBps = 8000;
 
@@ -96,10 +95,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
 
         emit Distributed(cleverDepositAmount, convexStakeAmount);
-    }
-
-    function borrow() external onlyOperator {
-        cleverCvxStrategy.borrow();
     }
 
     function previewDistribute() public view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount) {
@@ -151,7 +146,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     }
 
     function previewRequestUnlock(uint256 assets) public view returns (uint256) {
-        return super.previewWithdraw(assets);
+        uint256 totalLocked = cleverCvxStrategy.totalLocked();
+        return super.previewWithdraw(FixedPointMathLib.min(totalLocked, assets));
     }
 
     function requestUnlock(uint256 assets, address receiver, address owner) external returns (uint256 unlockEpoch) {

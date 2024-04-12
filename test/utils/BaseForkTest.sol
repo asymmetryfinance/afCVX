@@ -24,6 +24,7 @@ abstract contract BaseForkTest is Test {
     address internal immutable deployer = makeAddr("DEPLOYER");
     address internal immutable owner = makeAddr("OWNER");
     address internal immutable operator = makeAddr("OPERATOR");
+    address internal immutable feeCollector = makeAddr("FEE COLLECTOR");
 
     SimpleProxyFactory internal factory;
 
@@ -57,7 +58,7 @@ abstract contract BaseForkTest is Test {
                 factory.deployDeterministic(
                     cleverCvxStrategySalt,
                     address(_cleverCvxStrategyImplementation),
-                    abi.encodeCall(CleverCvxStrategy.initialize, (owner))
+                    abi.encodeCall(CleverCvxStrategy.initialize, (owner, operator))
                 )
             )
         );
@@ -67,7 +68,9 @@ abstract contract BaseForkTest is Test {
         afCvx = AfCvx(
             payable(
                 factory.deployDeterministic(
-                    afCvxSalt, address(_afCvxImplementation), abi.encodeCall(AfCvx.initialize, (owner, operator))
+                    afCvxSalt,
+                    address(_afCvxImplementation),
+                    abi.encodeCall(AfCvx.initialize, (owner, operator, feeCollector))
                 )
             )
         );

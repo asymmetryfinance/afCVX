@@ -60,8 +60,8 @@ contract AfCvxForkTest is BaseForkTest {
 
     /// @dev No CVX were distributed, new deposit is distributed with 80/20 ratio
     function test_previewDistribute_nothingDistributed() public {
-        uint256 assets = 1000e18;
-        _deposit(assets);
+        uint256 amount = 1000e18;
+        _deposit(amount);
 
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
 
@@ -71,14 +71,194 @@ contract AfCvxForkTest is BaseForkTest {
 
     /// @dev Assert distribution is balanced, new deposit is distributed with 80/20 ratio
     function test_previewDistribute_ratioBalanced() public {
-        uint256 assets = 50e18;
+        uint256 amount = 50e18;
         _mockCleverTotalValue(800e18, 0);
         _mockStakedTotalValue(200e18, 0);
-        _deposit(assets);
+        _deposit(amount);
 
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 40e18);
         assertEq(convexStakeAmount, 10e18);
+    }
+
+    /// @dev Assert distribution is imbalanced with Clever Strategy holding more than 80% of TVL.
+    ///      New deposit is distribute to correct imbalance
+    function test_previewDistribute_ratioImbalanced() public {
+        uint256 amount = 10e18;
+        _mockCleverTotalValue(900e18, 0);
+        _mockStakedTotalValue(100e18, 0);
+        _deposit(amount);
+
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+
+        assertEq(cleverDepositAmount, 0);
+        assertEq(convexStakeAmount, amount);
+    }
+
+    function test_distribute_depositToClever() public {
+        uint256 amount1 = 25e18;
+        address user1 = _createAccountWithCvx("user1", amount1);
+        _deposit(user1, amount1);
+
+        uint256 amount2 = 75e18;
+        address user2 = _createAccountWithCvx("user2", amount2);
+        _deposit(user2, amount2);
+
+        vm.startPrank(operator);
+        afCvx.distribute(false, 0);
+
+        (uint256 deposited,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
+
+        // 80% locked on Clever
+        assertEq(deposited, 80e18);
+        // 20% staked
+        assertEq(CVX_REWARDS_POOL.balanceOf(address(afCvx)), 20e18);
+
+        // Clever doesn't allow depositing and borrowing in the same block
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.borrow();
+
+        // Max borrow amount is a half of the amount locked in Clever
+        (,,, uint256 borrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
+        assertEq(borrowed, 40e18);
+
+        // All borrowed clevCVX is deposited to Furnace
+        (uint256 unrealised,) = FURNACE.getUserInfo(address(cleverCvxStrategy));
+        assertEq(unrealised, 40e18);
+    }
+
+    function test_distribute_swap() public {
+        uint256 amount = 100e18;
+        _deposit(amount);
+
+        vm.startPrank(operator);
+        afCvx.distribute(true, 0);
+
+        // 20% staked
+        assertEq(CVX_REWARDS_POOL.balanceOf(address(afCvx)), 20e18);
+
+        // nothing is locked in Clever
+        (uint256 deposited,,, uint256 borrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
+        assertEq(deposited, 0);
+        assertEq(borrowed, 0);
+
+        // All swapped clevCVX is deposited on Furnace
+        (uint256 unrealised,) = FURNACE.getUserInfo(address(cleverCvxStrategy));
+        assertGt(unrealised, 80e18);
+    }
+
+    function test_harvest() public {
+        uint256 amount = 100e18;
+        _deposit(amount);
+
+        assertEq(afCvx.weeklyWithdrawLimit(), 0);
+
+        vm.startPrank(owner);
+        afCvx.distribute(false, 0);
+        afCvx.setWeeklyWithdrawShare(200); // 2%;
+        uint256 rewards = afCvx.harvest(0);
+        vm.stopPrank();
+
+        assertEq(rewards, 0);
+        // weekly withdraw limit is updated when harvesting rewards
+        assertEq(afCvx.weeklyWithdrawLimit(), 2e18);
+        assertEq(afCvx.withdrawLimitNextUpdate(), block.timestamp + 1 weeks);
+
+        vm.warp(block.timestamp + 1 weeks);
+        _distributeFurnaceRewards(10e18);
+
+        vm.startPrank(owner);
+        rewards = afCvx.harvest(0);
+        assertTrue(rewards > 0);
+    }
+
+    function test_withdraw() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+
+        _deposit(user, assets);
+        assertEq(CVX.balanceOf(user), 0);
+        assertEq(afCvx.balanceOf(user), 100e18);
+
+        vm.startPrank(owner);
+        afCvx.distribute(false, 0);
+
+        uint256 shares = afCvx.previewWithdraw(assets);
+        assertEq(shares, 0);
+
+        afCvx.setWeeklyWithdrawShare(200); // 2%;
+        afCvx.harvest(0);
+        vm.stopPrank();
+
+        shares = afCvx.previewWithdraw(assets);
+        assertEq(shares, 2e18);
+
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), shares);
+        afCvx.withdraw(assets, user, user);
+
+        assertEq(CVX.balanceOf(user), 2e18);
+        assertEq(afCvx.balanceOf(user), 98e18);
+    }
+
+    function test_redeem() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+
+        uint256 shares = _deposit(user, assets);
+        assertEq(CVX.balanceOf(user), 0);
+        assertEq(afCvx.balanceOf(user), 100e18);
+
+        vm.startPrank(owner);
+        afCvx.distribute(false, 0);
+
+        uint256 asserts = afCvx.previewRedeem(shares);
+        assertEq(asserts, 0);
+
+        afCvx.setWeeklyWithdrawShare(200); // 2%;
+        afCvx.harvest(0);
+        vm.stopPrank();
+
+        asserts = afCvx.previewRedeem(shares);
+        assertEq(asserts, 2e18);
+
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), shares);
+        afCvx.redeem(shares, user, user);
+
+        assertEq(CVX.balanceOf(user), 2e18);
+        assertEq(afCvx.balanceOf(user), 98e18);
+    }
+
+    function test_withdrawUnlocked() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+
+        _deposit(user, assets);
+        assertEq(afCvx.balanceOf(user), 100e18);
+
+        vm.startPrank(owner);
+        afCvx.distribute(false, 0);
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.borrow();
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+        uint256 assetsInClever = 80e18;
+        uint256 shares = afCvx.previewRequestUnlock(assetsInClever);
+        assertEq(shares, assetsInClever);
+
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), shares);
+        uint256 unlockEpoch = afCvx.requestUnlock(assetsInClever, user, user);
+        vm.stopPrank();
+        uint256 currentEpoch = block.timestamp / 1 weeks;
+
+        // withdraw  CVX in 17 weeks
+        assertEq(unlockEpoch, currentEpoch + 17);
+        assertEq(CVX.balanceOf(user), 0);
+        // afCVX is burnt
+        assertEq(afCvx.balanceOf(user), 20e18);
     }
 }

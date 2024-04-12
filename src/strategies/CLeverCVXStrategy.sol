@@ -23,6 +23,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     uint256 private constant REWARDS_DURATION = 1 weeks;
 
     address public immutable manager;
+    address public operator;
 
     /// @notice The total amount of CVX unlock obligations.
     uint256 internal unlockObligations;
@@ -34,15 +35,23 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         _;
     }
 
+    modifier onlyOperator() {
+        if (msg.sender != owner()) {
+            if (msg.sender != operator) revert Unauthorized();
+        }
+        _;
+    }
+
     /// @dev As recommended by https://docs.openzeppelin.com/upgrades-plugins/1.x/writing-upgradeable
     constructor(address afCvx) {
         _disableInitializers();
         manager = afCvx;
     }
 
-    function initialize(address initialOwner) external initializer {
-        _initializeOwner(initialOwner);
+    function initialize(address _owner, address _operator) external initializer {
+        _initializeOwner(_owner);
         __UUPSUpgradeable_init();
+        operator = _operator;
 
         // Approve once to save gas later by avoiding having to re-approve every time.
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(FURNACE), token: address(CLEVCVX) }));
@@ -56,6 +65,11 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
         deposited = depositedClever - borrowedClever + unrealisedFurnace - unlockObligations;
         rewards = realisedFurnace;
+    }
+
+    function totalLocked() external view returns (uint256) {
+        (uint256 deposited,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        return deposited;
     }
 
     function previewUnlocks(uint256 amount) external view returns (EpochUnlockInfo[] memory unlocks) {
@@ -127,7 +141,8 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     /// @notice borrows maximum amount of clevCVX and deposits it to Furnace
-    function borrow() external onlyManager {
+    /// @dev must be called after `deposit` as Clever doesn't allow depositing and borrowing in the same block.
+    function borrow() external onlyOperator {
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
@@ -187,7 +202,9 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         address(CVX).safeTransfer(manager, cvxUnlocked);
     }
 
-    function repay() external onlyManager {
+    /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking
+    /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block.
+    function repay() external onlyOperator {
         uint256 amount = unlockObligations;
         if (amount != 0) {
             (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
@@ -196,12 +213,20 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
-    function unlock() external onlyManager {
+    /// @notice unlocks CVX to fulfill the withdrawal requests
+    /// @dev must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.
+    function unlock() external onlyOperator {
         uint256 amount = unlockObligations;
         if (amount != 0) {
             unlockObligations = 0;
             CLEVER_CVX_LOCKER.unlock(amount);
         }
+    }
+
+    function setOperator(address newOperator) external onlyOwner {
+        if (newOperator != address(0)) revert InvalidAddress();
+        operator = newOperator;
+        emit OperatorSet(newOperator);
     }
 
     /// @dev Allows the owner of the contract to upgrade to *any* new address.
