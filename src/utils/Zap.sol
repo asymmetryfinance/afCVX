@@ -45,6 +45,7 @@ library Zap {
         return ICurveCryptoPool(CVX_ETH_POOL).exchange_underlying{ value: ethAmount }(0, 1, ethAmount, minAmountOut);
     }
 
+    // @audit - this can be manipulated -- https://resources.curve.fi/factory-pools/understanding-oracles/#manipulation
     function convertCvxCrvToCvx(uint256 cvxCrvAmount) external view returns (uint256) {
         // cvxCRV -> CRV
         uint256 crvAmount = cvxCrvAmount.mulWad(ICurveFactoryPlainPool(CVXCRV_CRV_POOL).price_oracle());

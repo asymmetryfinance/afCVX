@@ -26,6 +26,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
     ICleverCvxStrategy public immutable cleverCvxStrategy;
 
+    // @audit - replace uint16s with uint256s location so it packs better (16 * 4 + 160) - save 1 storage slot
     uint16 public protocolFeeBps;
     uint16 public withdrawalFeeBps;
     uint16 public cleverStrategyShareBps;
@@ -35,6 +36,17 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     address public protocolFeeCollector;
     address public operator;
 
+    // @audit -- or, set vars as follow to save 2 storage slots
+    // uint256 public weeklyWithdrawLimit;
+    // uint16 public protocolFeeBps;
+    // uint16 public withdrawalFeeBps;
+    // uint16 public cleverStrategyShareBps;
+    // uint16 public weeklyWithdrawShareBps;
+    // address public protocolFeeCollector;
+    // uint96 public withdrawLimitNextUpdate;
+    // address public operator;
+
+    // @audit - save gas with `if (msg.sender != owner() && msg.sender != operator) revert Unauthorized();`
     modifier onlyOperator() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
@@ -63,6 +75,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(cleverCvxStrategy), token: address(CVX) }));
     }
 
+    // @audit - limit only CRV_ETH_POOL Curve pool to be able to send ETH
     receive() external payable { }
 
     function decimals() public pure override(ERC4626Upgradeable, ERC20Upgradeable, IERC20Metadata) returns (uint8) {
@@ -94,7 +107,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
             CVX_REWARDS_POOL.stake(convexStakeAmount);
         }
 
-        emit Distributed(cleverDepositAmount, convexStakeAmount);
+        emit Distributed(cleverDepositAmount, convexStakeAmount); // @audit - should be called before external calls
     }
 
     function previewDistribute() public view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount) {
@@ -118,6 +131,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
     }
 
+    // @audit - doesnt follow ERC4626 spec -- on actual withdraw call, less assets may be withdrawn than what is expected
     function previewWithdraw(uint256 assets)
         public
         view
@@ -131,6 +145,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return super.previewWithdraw(assets);
     }
 
+    // @audit - doesnt follow ERC4626 spec -- on actual redeem call, less shares may burn than what is expected
     function previewRedeem(uint256 shares)
         public
         view
@@ -222,6 +237,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         emit ProtocolFeeSet(newFeeBps);
     }
 
+    // @audit - is this used at all?
     /// @notice Sets the withdrawal fee.
     /// @param newFeeBps New withdrawal fee.
     function setWithdrawalFee(uint16 newFeeBps) external onlyOwner {
@@ -260,7 +276,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         uint256 rewards = CVX_REWARDS_POOL.earned(address(this));
         if (rewards != 0) {
             // Staked CVX rewards are paid in cvxCRV, convert cvxCRV to CVX for calculations
-            rewards = Zap.convertCvxCrvToCvx(rewards);
+            rewards = Zap.convertCvxCrvToCvx(rewards); // @audit - can be manipulated
             rewards -= _mulBps(rewards, protocolFeeBps);
         }
         return staked + rewards;
@@ -271,15 +287,16 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return deposited + (rewards == 0 ? 0 : (rewards - _mulBps(rewards, protocolFeeBps)));
     }
 
+    // @audit - should probably have nonReentrant modifier
     function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
         internal
         virtual
         override
     {
-        if (assets > weeklyWithdrawLimit) {
+        if (assets > weeklyWithdrawLimit) { // @audit - should be removed -- all accounting should be done in preview funcs
             assets = weeklyWithdrawLimit;
         }
-        shares = previewWithdraw(assets);
+        shares = previewWithdraw(assets); // @audit - should be removed -- all accounting should be done in preview funcs
         unchecked {
             weeklyWithdrawLimit = weeklyWithdrawLimit - assets;
         }

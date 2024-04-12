@@ -63,6 +63,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
 
+        // @audit - should borrowedClever be here?
         deposited = depositedClever - borrowedClever + unrealisedFurnace - unlockObligations;
         rewards = realisedFurnace;
     }
@@ -174,6 +175,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
+    // @audit - shouldnt unlockObligations be updated here?
     /// @notice withdraws unlocked CVX
     function withdrawUnlocked(address account) external onlyManager returns (uint256 cvxUnlocked) {
         uint256 currentEpoch = block.timestamp / REWARDS_DURATION;
@@ -199,7 +201,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
             }
         }
 
-        address(CVX).safeTransfer(manager, cvxUnlocked);
+        address(CVX).safeTransfer(manager, cvxUnlocked); // @audit - can transfer directly to `account`?
     }
 
     /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking
@@ -208,8 +210,8 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         uint256 amount = unlockObligations;
         if (amount != 0) {
             (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
-            FURNACE.withdraw(address(this), repayAmount + repayFee);
-            CLEVER_CVX_LOCKER.repay(0, repayAmount);
+            FURNACE.withdraw(address(this), repayAmount + repayFee); // @audit - may not have enough to pay fee
+            CLEVER_CVX_LOCKER.repay(0, repayAmount); // @audit should repay fee here aswell or `unlock` will fail
         }
     }
 
