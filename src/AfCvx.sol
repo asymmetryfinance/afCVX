@@ -255,15 +255,11 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @dev Allows the owner of the contract to upgrade to *any* new address.
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner { }
 
+    /// @notice Returns total assets staked in Convex
+    /// @dev We ignore rewards here as they are paid in cvxCRV and 
+    ///      there is no reliable way to get cvxCRV to CVX price on chain
     function _stakedCvxStrategyAssets() private view returns (uint256) {
-        uint256 staked = CVX_REWARDS_POOL.balanceOf(address(this));
-        uint256 rewards = CVX_REWARDS_POOL.earned(address(this));
-        if (rewards != 0) {
-            // Staked CVX rewards are paid in cvxCRV, convert cvxCRV to CVX for calculations
-            rewards = Zap.convertCvxCrvToCvx(rewards);
-            rewards -= _mulBps(rewards, protocolFeeBps);
-        }
-        return staked + rewards;
+        return CVX_REWARDS_POOL.balanceOf(address(this));
     }
 
     function _cleverCvxStrategyAssets() private view returns (uint256) {

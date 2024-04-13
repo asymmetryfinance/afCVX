@@ -44,17 +44,4 @@ library Zap {
         // ETH -> CVX
         return ICurveCryptoPool(CVX_ETH_POOL).exchange_underlying{ value: ethAmount }(0, 1, ethAmount, minAmountOut);
     }
-
-    function convertCvxCrvToCvx(uint256 cvxCrvAmount) external view returns (uint256) {
-        // cvxCRV -> CRV
-        uint256 crvAmount = cvxCrvAmount.mulWad(ICurveFactoryPlainPool(CVXCRV_CRV_POOL).price_oracle());
-
-        // CRV -> ETH
-        uint256 ethUsdPrice = ICurveCryptoPool(CRV_ETH_POOL).price_oracle(0);
-        uint256 crvUsdPrice = ICurveCryptoPool(CRV_ETH_POOL).price_oracle(1);
-        uint256 ethAmount = crvUsdPrice * crvAmount / ethUsdPrice;
-
-        // ETH -> CVX
-        return ethAmount.divWad(ICurveFactoryPlainPool(CVX_ETH_POOL).price_oracle());
-    }
 }
