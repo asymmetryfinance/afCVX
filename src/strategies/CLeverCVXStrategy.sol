@@ -35,6 +35,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         _;
     }
 
+    // @audit - save gas with `if (msg.sender != owner() && msg.sender != operator) revert Unauthorized();`
     modifier onlyOperator() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
@@ -59,11 +60,11 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CLEVER_CVX_LOCKER), token: address(CLEVCVX) }));
     }
 
+    // @audit - should be external
     function totalValue() public view returns (uint256 deposited, uint256 rewards) {
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
 
-        // @audit - should borrowedClever be here?
         deposited = depositedClever - borrowedClever + unrealisedFurnace - unlockObligations;
         rewards = realisedFurnace;
     }
@@ -103,6 +104,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
+    // @audit - should be external
     function getPendingUnlocks(address account) public view returns (EpochUnlockInfo[] memory unlocks) {
         uint256 pendingUnlocksLength = 0;
         (, EpochUnlockInfo[] memory globalPendingUnlocks) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
@@ -127,6 +129,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
+    // @audit - can be sandwiched
     /// @notice deposits CVX to the strategy
     /// @param cvxAmount amount of CVX tokens to deposit
     /// @param swap a flag indicating whether CVX should be swapped on Curve for clevCVX or deposited on Clever.
@@ -147,6 +150,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
+    // @audit claimed CVX will be locked here forever
     /// @notice claims all realised CVX from Furnace
     /// @return rewards amount of realised CVX
     function claim() external onlyManager returns (uint256 rewards) {
@@ -182,9 +186,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         (, EpochUnlockInfo[] memory globalPendingUnlocks) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
         uint256 globalPendingUnlocksLength = globalPendingUnlocks.length;
 
+        // @audit - this entire for loop should be done offchain
         for (uint256 i; i < globalPendingUnlocksLength; i++) {
             uint256 unlockEpoch = globalPendingUnlocks[i].unlockEpoch;
-            uint256 unlockAmount = pendingUnlocks[account][unlockEpoch];
+            uint256 unlockAmount = pendingUnlocks[account][unlockEpoch]; // @audit - storage reads inside a loop
             if (unlockEpoch <= currentEpoch && unlockAmount != 0) {
                 delete pendingUnlocks[account][unlockEpoch];
                 cvxUnlocked += unlockAmount;
@@ -194,16 +199,17 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
         uint256 cvxAvailable = CVX.balanceOf(address(this));
 
-        if (cvxAvailable < cvxUnlocked) {
+        if (cvxAvailable < cvxUnlocked) { // @audit - the `else` case is not handled - the unlocked assets that were not sent to user should be re-deposited
             (,, uint256 totalUnlocked,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
             if (totalUnlocked > 0) {
                 CLEVER_CVX_LOCKER.withdrawUnlocked();
             }
         }
 
-        address(CVX).safeTransfer(manager, cvxUnlocked); // @audit - can transfer directly to `account`?
+        address(CVX).safeTransfer(manager, cvxUnlocked); // @audit - can transfer directly to `account`
     }
 
+    // @audit - attacker can deposit + requestUnlock after this is called, expecting the `unlock` to be called later and DOSing it
     /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking
     /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block.
     function repay() external onlyOperator {

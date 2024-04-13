@@ -10,6 +10,8 @@ import { ICleverCvxStrategy } from "src/interfaces/afCvx/ICleverCvxStrategy.sol"
 import { Zap } from "src/utils/Zap.sol";
 import { BaseForkTest } from "test/utils/BaseForkTest.sol";
 
+import "forge-std/console.sol";
+
 contract AfCvxForkTest is BaseForkTest {
     function test_deposit() public {
         uint256 assets = 10e18;
@@ -114,6 +116,8 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(deposited, 80e18);
         // 20% staked
         assertEq(CVX_REWARDS_POOL.balanceOf(address(afCvx)), 20e18);
+
+        uint256 _usersSharesBefore = afCvx.balanceOf(user1);
 
         // Clever doesn't allow depositing and borrowing in the same block
         vm.roll(block.number + 1);

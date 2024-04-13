@@ -19,6 +19,8 @@ import { ICleverCvxStrategy } from "./interfaces/afCvx/ICleverCvxStrategy.sol";
 import { CVX } from "./interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "./interfaces/convex/ICvxRewardsPool.sol";
 import { Zap } from "./utils/Zap.sol";
+
+// @audit - weekly withdraw limit be emptied by attacker --> implement a withdrawal fee / per account limit
 contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
     using SafeTransferLib for address;
 
@@ -160,6 +162,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return assets;
     }
 
+    // @audit - may return unexpected results (less assets/shares withdrawn than expected)
     function previewRequestUnlock(uint256 assets) public view returns (uint256) {
         uint256 totalLocked = cleverCvxStrategy.totalLocked();
         return super.previewWithdraw(FixedPointMathLib.min(totalLocked, assets));
@@ -201,7 +204,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         if (rewards != 0) {
             uint256 fee = _mulBps(rewards, protocolFeeBps);
             rewards -= fee;
-            address(CVX).safeTransfer(protocolFeeCollector, fee);
+            address(CVX).safeTransfer(protocolFeeCollector, fee); // @audit this may fail because the `cleverRewards` are in Clever strategy contract
             emit Harvested(cleverRewards, convexStakedRewards);
         }
 
