@@ -260,5 +260,30 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(CVX.balanceOf(user), 0);
         // afCVX is burnt
         assertEq(afCvx.balanceOf(user), 20e18);
+
+        vm.prank(operator);
+        // repay fails because the repay amount is greater than the amount deposited in Furnace
+        // due to 1% repay fee that Clever takes
+        vm.expectRevert(ICleverCvxStrategy.InsufficientFurnaceBalance.selector);
+        cleverCvxStrategy.repay();
+
+        // deposit more
+        _deposit(10e18);
+        vm.startPrank(operator);
+        afCvx.distribute(false, 0);
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.borrow();
+        vm.roll(block.number + 1);
+
+        // repay and unlock succeeds
+        cleverCvxStrategy.repay();
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.unlock();
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+        skip(17 weeks);
+        afCvx.withdrawUnlocked(user);
+        assertEq(CVX.balanceOf(user), 80e18);
     }
 }

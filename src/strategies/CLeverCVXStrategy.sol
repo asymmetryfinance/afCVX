@@ -28,7 +28,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice The total amount of CVX unlock obligations.
     uint256 internal unlockObligations;
 
-    mapping(address account => mapping(uint256 unlockEpoch => uint256 amount)) public pendingUnlocks;
+    mapping(address => UnlockInfo) requestedUnlocks;
 
     modifier onlyManager() {
         if (msg.sender != manager) revert Unauthorized();
@@ -72,7 +72,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         return deposited;
     }
 
-    function previewUnlocks(uint256 amount) external view returns (EpochUnlockInfo[] memory unlocks) {
+    function previewUnlocks(uint256 amount) external view returns (UnlockRequest[] memory unlocks) {
         (EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
         uint256 locksLength = locks.length;
         uint256 unlocksLength;
@@ -87,42 +87,30 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
             }
         }
 
-        unlocks = new EpochUnlockInfo[](unlocksLength);
+        unlocks = new UnlockRequest[](unlocksLength);
         requestedAmount = amount;
         for (uint256 i; i < unlocksLength; i++) {
             uint192 locked = locks[i].pendingUnlock;
             if (requestedAmount > locked) {
-                unlocks[i].pendingUnlock = locked;
+                unlocks[i].unlockAmount = locked;
                 requestedAmount -= locked;
             } else {
-                unlocks[i].pendingUnlock = uint192(requestedAmount);
+                unlocks[i].unlockAmount = uint192(requestedAmount);
             }
 
             unlocks[i].unlockEpoch = locks[i].unlockEpoch;
         }
     }
 
-    function getPendingUnlocks(address account) public view returns (EpochUnlockInfo[] memory unlocks) {
-        uint256 pendingUnlocksLength = 0;
-        (, EpochUnlockInfo[] memory globalPendingUnlocks) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
-        uint256 globalPendingUnlocksLength = globalPendingUnlocks.length;
-
-        for (uint256 i; i < globalPendingUnlocksLength; i++) {
-            uint256 unlockEpoch = globalPendingUnlocks[i].unlockEpoch;
-            if (pendingUnlocks[account][unlockEpoch] != 0) {
-                pendingUnlocksLength++;
-            }
-        }
-
-        unlocks = new EpochUnlockInfo[](pendingUnlocksLength);
-        uint256 j = 0;
-        for (uint256 i; i < globalPendingUnlocksLength; i++) {
-            uint256 unlockEpoch = globalPendingUnlocks[i].unlockEpoch;
-            uint256 unlockAmount = pendingUnlocks[account][unlockEpoch];
-            if (unlockAmount != 0) {
-                unlocks[j++] =
-                    EpochUnlockInfo({ pendingUnlock: uint192(unlockAmount), unlockEpoch: uint64(unlockEpoch) });
-            }
+    function getRequestedUnlocks(address account) public view returns (UnlockRequest[] memory unlocks) {
+        UnlockRequest[] storage accountUnlocks = requestedUnlocks[account].unlocks;
+        uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
+        uint256 unlocksLength = accountUnlocks.length;
+        unlocks = new UnlockRequest[](unlocksLength - nextUnlockIndex);
+        for (uint256 i; nextUnlockIndex < unlocksLength; nextUnlockIndex++) {
+            unlocks[i].unlockEpoch = accountUnlocks[nextUnlockIndex].unlockEpoch;
+            unlocks[i].unlockAmount = accountUnlocks[nextUnlockIndex].unlockAmount;
+            i++;
         }
     }
 
@@ -158,16 +146,17 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice requests to unlock CVX
     function requestUnlock(uint256 amount, address account) external onlyManager returns (uint256 unlockEpoch) {
         unlockObligations += amount;
+        UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
         (EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
         uint256 locksLength = locks.length;
         for (uint256 i; i < locksLength; i++) {
             uint256 locked = locks[i].pendingUnlock;
-            uint256 epoch = locks[i].unlockEpoch;
+            uint64 epoch = locks[i].unlockEpoch;
             if (amount > locked) {
-                pendingUnlocks[account][epoch] += locked;
+                unlocks.push(UnlockRequest({ unlockAmount: uint192(locked), unlockEpoch: epoch }));
                 amount -= locked;
             } else {
-                pendingUnlocks[account][epoch] += amount;
+                unlocks.push(UnlockRequest({ unlockAmount: uint192(amount), unlockEpoch: epoch }));
                 unlockEpoch = epoch;
                 break;
             }
@@ -177,17 +166,22 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice withdraws unlocked CVX
     function withdrawUnlocked(address account) external onlyManager returns (uint256 cvxUnlocked) {
         uint256 currentEpoch = block.timestamp / REWARDS_DURATION;
-        (, EpochUnlockInfo[] memory globalPendingUnlocks) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
-        uint256 globalPendingUnlocksLength = globalPendingUnlocks.length;
+        UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
+        uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
+        uint256 unlocksLength = unlocks.length;
 
-        for (uint256 i; i < globalPendingUnlocksLength; i++) {
-            uint256 unlockEpoch = globalPendingUnlocks[i].unlockEpoch;
-            uint256 unlockAmount = pendingUnlocks[account][unlockEpoch];
-            if (unlockEpoch <= currentEpoch && unlockAmount != 0) {
-                delete pendingUnlocks[account][unlockEpoch];
+        for (; nextUnlockIndex < unlocksLength; nextUnlockIndex++) {
+            uint256 unlockEpoch = unlocks[nextUnlockIndex].unlockEpoch;
+            uint256 unlockAmount = unlocks[nextUnlockIndex].unlockAmount;
+            if (unlockEpoch <= currentEpoch) {
+                delete unlocks[nextUnlockIndex];
                 cvxUnlocked += unlockAmount;
+            } else {
+                break;
             }
         }
+        requestedUnlocks[account].nextUnlockIndex = nextUnlockIndex;
+
         if (cvxUnlocked == 0) return cvxUnlocked;
 
         uint256 cvxAvailable = CVX.balanceOf(address(this));
@@ -208,6 +202,11 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         uint256 amount = unlockObligations;
         if (amount != 0) {
             (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
+            (uint256 clevCvxAvailable,) = FURNACE.getUserInfo(address(this));
+            uint256 clevCvxRequired = repayAmount + repayFee;
+
+            if (clevCvxRequired > clevCvxAvailable) revert InsufficientFurnaceBalance();
+
             FURNACE.withdraw(address(this), repayAmount + repayFee);
             CLEVER_CVX_LOCKER.repay(0, repayAmount);
         }

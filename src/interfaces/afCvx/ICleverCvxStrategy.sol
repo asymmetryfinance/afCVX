@@ -3,7 +3,18 @@
 pragma solidity 0.8.25;
 
 interface ICleverCvxStrategy {
+    struct UnlockRequest {
+        uint192 unlockAmount;
+        uint64 unlockEpoch;
+    }
+
+    struct UnlockInfo {
+        UnlockRequest[] unlocks;
+        uint256 nextUnlockIndex;
+    }
+
     error InvalidAddress();
+    error InsufficientFurnaceBalance();
 
     event OperatorSet(address indexed newOperator);
 
