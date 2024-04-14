@@ -59,7 +59,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CLEVER_CVX_LOCKER), token: address(CLEVCVX) }));
     }
 
-    function totalValue() public view returns (uint256 deposited, uint256 rewards) {
+    function totalValue() external view returns (uint256 deposited, uint256 rewards) {
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
 
@@ -72,37 +72,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         return deposited;
     }
 
-    function previewUnlocks(uint256 amount) external view returns (UnlockRequest[] memory unlocks) {
-        (EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
-        uint256 locksLength = locks.length;
-        uint256 unlocksLength;
-        uint256 requestedAmount = amount;
-        for (uint256 i; i < locksLength; i++) {
-            uint256 locked = locks[i].pendingUnlock;
-            unlocksLength++;
-            if (requestedAmount > locked) {
-                requestedAmount -= locked;
-            } else {
-                break;
-            }
-        }
-
-        unlocks = new UnlockRequest[](unlocksLength);
-        requestedAmount = amount;
-        for (uint256 i; i < unlocksLength; i++) {
-            uint192 locked = locks[i].pendingUnlock;
-            if (requestedAmount > locked) {
-                unlocks[i].unlockAmount = locked;
-                requestedAmount -= locked;
-            } else {
-                unlocks[i].unlockAmount = uint192(requestedAmount);
-            }
-
-            unlocks[i].unlockEpoch = locks[i].unlockEpoch;
-        }
-    }
-
-    function getRequestedUnlocks(address account) public view returns (UnlockRequest[] memory unlocks) {
+    function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks) {
         UnlockRequest[] storage accountUnlocks = requestedUnlocks[account].unlocks;
         uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
         uint256 unlocksLength = accountUnlocks.length;
