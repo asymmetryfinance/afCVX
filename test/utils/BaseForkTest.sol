@@ -99,6 +99,14 @@ abstract contract BaseForkTest is Test {
         account = _createAccountWithCvx("account", amount);
     }
 
+    function _distributeAndBorrow() internal {
+        vm.startPrank(owner);
+        afCvx.distribute(false, 0);
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.borrow();
+        vm.stopPrank();
+    }
+
     function _distributeFurnaceRewards(uint256 rewards) internal {
         address furnaceOwner = Ownable(address(FURNACE)).owner();
         _transferCvx(furnaceOwner, rewards);

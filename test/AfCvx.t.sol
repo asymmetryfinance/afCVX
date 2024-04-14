@@ -154,9 +154,11 @@ contract AfCvxForkTest is BaseForkTest {
 
         assertEq(afCvx.weeklyWithdrawLimit(), 0);
 
+        _distributeAndBorrow();
+
         vm.startPrank(owner);
-        afCvx.distribute(false, 0);
         afCvx.setWeeklyWithdrawShare(200); // 2%;
+        afCvx.setProtocolFee(100); // 1%;
         uint256 rewards = afCvx.harvest(0);
         vm.stopPrank();
 
@@ -165,12 +167,17 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(afCvx.weeklyWithdrawLimit(), 2e18);
         assertEq(afCvx.withdrawLimitNextUpdate(), block.timestamp + 1 weeks);
 
-        vm.warp(block.timestamp + 1 weeks);
+        skip(1 weeks);
         _distributeFurnaceRewards(10e18);
 
-        vm.startPrank(owner);
+        (, uint256 cleverRewards) = cleverCvxStrategy.totalValue();
+        assertTrue(cleverRewards > 0);
+
+        vm.prank(owner);
         rewards = afCvx.harvest(0);
-        assertTrue(rewards > 0);
+
+        assertTrue(rewards > cleverRewards);
+        assertTrue(CVX.balanceOf(feeCollector) > 0);
     }
 
     function test_withdraw() public {
@@ -181,12 +188,12 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(CVX.balanceOf(user), 0);
         assertEq(afCvx.balanceOf(user), 100e18);
 
-        vm.startPrank(owner);
-        afCvx.distribute(false, 0);
+        _distributeAndBorrow();
 
         uint256 shares = afCvx.previewWithdraw(assets);
         assertEq(shares, 0);
 
+        vm.startPrank(owner);
         afCvx.setWeeklyWithdrawShare(200); // 2%;
         afCvx.harvest(0);
         vm.stopPrank();
@@ -210,12 +217,12 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(CVX.balanceOf(user), 0);
         assertEq(afCvx.balanceOf(user), 100e18);
 
-        vm.startPrank(owner);
-        afCvx.distribute(false, 0);
+        _distributeAndBorrow();
 
         uint256 asserts = afCvx.previewRedeem(shares);
         assertEq(asserts, 0);
 
+        vm.startPrank(owner);
         afCvx.setWeeklyWithdrawShare(200); // 2%;
         afCvx.harvest(0);
         vm.stopPrank();
@@ -238,11 +245,7 @@ contract AfCvxForkTest is BaseForkTest {
         _deposit(user, assets);
         assertEq(afCvx.balanceOf(user), 100e18);
 
-        vm.startPrank(owner);
-        afCvx.distribute(false, 0);
-        vm.roll(block.number + 1);
-        cleverCvxStrategy.borrow();
-        vm.stopPrank();
+        _distributeAndBorrow();
 
         vm.roll(block.number + 1);
         uint256 assetsInClever = 80e18;
