@@ -19,6 +19,7 @@ import { ICleverCvxStrategy } from "./interfaces/afCvx/ICleverCvxStrategy.sol";
 import { CVX } from "./interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "./interfaces/convex/ICvxRewardsPool.sol";
 import { Zap } from "./utils/Zap.sol";
+
 contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
     using SafeTransferLib for address;
 
@@ -63,7 +64,9 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(cleverCvxStrategy), token: address(CVX) }));
     }
 
-    receive() external payable { }
+    receive() external payable {
+        if (msg.sender != Zap.CRV_ETH_POOL) revert DirectEthTransfer();
+    }
 
     function decimals() public pure override(ERC4626Upgradeable, ERC20Upgradeable, IERC20Metadata) returns (uint8) {
         return 18;
@@ -256,7 +259,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner { }
 
     /// @notice Returns total assets staked in Convex
-    /// @dev We ignore rewards here as they are paid in cvxCRV and 
+    /// @dev We ignore rewards here as they are paid in cvxCRV and
     ///      there is no reliable way to get cvxCRV to CVX price on chain
     function _stakedCvxStrategyAssets() private view returns (uint256) {
         return CVX_REWARDS_POOL.balanceOf(address(this));

@@ -8,6 +8,7 @@ interface IAfCvx is IERC4626 {
     error InvalidShare();
     error InvalidFee();
     error InvalidAddress();
+    error DirectEthTransfer();
 
     event CleverCvxStrategyShareSet(uint256 indexed newShare);
     event ProtocolFeeSet(uint256 indexed newProtocolFee);
