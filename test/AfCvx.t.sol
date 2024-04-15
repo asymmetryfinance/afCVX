@@ -180,6 +180,33 @@ contract AfCvxForkTest is BaseForkTest {
         assertTrue(CVX.balanceOf(feeCollector) > 0);
     }
 
+    function test_previewWithdraw() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+        uint256 shares = _deposit(user, assets);
+
+        vm.prank(user);
+        afCvx.approve(address(afCvx), shares);
+
+        _distributeAndBorrow();
+
+        // weekly withdraw limit is zero
+        uint256 preview = afCvx.previewWithdraw(assets);
+        vm.prank(user);
+        uint256 actual = afCvx.withdraw(assets, user, user);
+        assertEq(preview, actual);
+        assertEq(preview, 0);
+
+        _updateWeeklyWithdrawLimit(1000); // 10%
+        assertEq(afCvx.weeklyWithdrawLimit(), 10e18);
+
+        preview = afCvx.previewWithdraw(assets);
+        vm.prank(user);
+        actual = afCvx.withdraw(assets, user, user);
+        assertEq(preview, actual);
+        assertEq(preview, 10e18);
+    }
+
     function test_withdraw() public {
         uint256 assets = 100e18;
         address user = _createAccountWithCvx(assets);
@@ -207,6 +234,34 @@ contract AfCvxForkTest is BaseForkTest {
 
         assertEq(CVX.balanceOf(user), 2e18);
         assertEq(afCvx.balanceOf(user), 98e18);
+    }
+
+    function test_previewRedeem() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+        uint256 shares = _deposit(user, assets);
+
+        vm.prank(user);
+        afCvx.approve(address(afCvx), shares);
+
+        _deposit(900e18);
+        _distributeAndBorrow();
+
+        // weekly withdraw limit is zero
+        uint256 preview = afCvx.previewRedeem(shares);
+        vm.prank(user);
+        uint256 actual = afCvx.redeem(shares, user, user);
+        assertEq(preview, actual);
+        assertEq(preview, 0);
+
+        _updateWeeklyWithdrawLimit(1000); // 10%
+        assertEq(afCvx.weeklyWithdrawLimit(), 100e18);
+
+        preview = afCvx.previewRedeem(shares);
+        vm.prank(user);
+        actual = afCvx.redeem(shares, user, user);
+        assertEq(preview, actual);
+        assertEq(preview, 100e18);
     }
 
     function test_redeem() public {
@@ -238,6 +293,25 @@ contract AfCvxForkTest is BaseForkTest {
         assertEq(afCvx.balanceOf(user), 98e18);
     }
 
+    function test_previewUnlock() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+
+        uint256 shares = _deposit(user, assets);
+        assertEq(afCvx.balanceOf(user), 100e18);
+
+        _distributeAndBorrow();
+
+        uint256 preview = afCvx.previewRequestUnlock(assets);
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), shares);
+        (, uint256 actual) = afCvx.requestUnlock(assets, user, user);
+        vm.stopPrank();
+
+        assertEq(preview, actual);
+        assertEq(preview, 80e18);
+    }
+
     function test_withdrawUnlocked() public {
         uint256 assets = 100e18;
         address user = _createAccountWithCvx(assets);
@@ -254,7 +328,7 @@ contract AfCvxForkTest is BaseForkTest {
 
         vm.startPrank(user);
         afCvx.approve(address(afCvx), shares);
-        uint256 unlockEpoch = afCvx.requestUnlock(assetsInClever, user, user);
+        (uint256 unlockEpoch,) = afCvx.requestUnlock(assetsInClever, user, user);
         vm.stopPrank();
         uint256 currentEpoch = block.timestamp / 1 weeks;
 

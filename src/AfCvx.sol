@@ -148,27 +148,28 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return assets;
     }
 
-    function previewRequestUnlock(uint256 assets) public view returns (uint256) {
+    function previewRequestUnlock(uint256 assets) public view returns (uint256 shares) {
         uint256 totalLocked = cleverCvxStrategy.totalLocked();
-        return super.previewWithdraw(FixedPointMathLib.min(totalLocked, assets));
+        shares = super.previewWithdraw(FixedPointMathLib.min(totalLocked, assets));
     }
 
-    function requestUnlock(uint256 assets, address receiver, address owner) external returns (uint256 unlockEpoch) {
-        uint256 shares = previewRequestUnlock(assets);
+    function requestUnlock(uint256 assets, address receiver, address owner) external returns (uint256 unlockEpoch, uint256 shares) {
+        shares = previewRequestUnlock(assets);
         if (msg.sender != owner) {
             _spendAllowance(owner, msg.sender, shares);
         }
 
         _burn(owner, shares);
         unlockEpoch = cleverCvxStrategy.requestUnlock(assets, receiver);
-        emit UnlockRequested(receiver, assets, unlockEpoch);
+        
+        emit UnlockRequested(msg.sender, receiver, owner, assets, shares, unlockEpoch);
     }
 
     function withdrawUnlocked(address receiver) external {
         uint256 cvxUnlocked = cleverCvxStrategy.withdrawUnlocked(receiver);
         if (cvxUnlocked != 0) {
             address(CVX).safeTransfer(receiver, cvxUnlocked);
-            emit UnlockedWithdrawn(receiver, cvxUnlocked);
+            emit UnlockedWithdrawn(msg.sender, receiver, cvxUnlocked);
         }
     }
 
@@ -282,8 +283,9 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         unchecked {
             weeklyWithdrawLimit = weeklyWithdrawLimit - assets;
         }
-
-        CVX_REWARDS_POOL.withdraw(assets, false);
+        if (assets != 0) {
+            CVX_REWARDS_POOL.withdraw(assets, false);
+        }
         super._withdraw(caller, receiver, owner, assets, shares);
     }
 

@@ -128,6 +128,13 @@ abstract contract BaseForkTest is Test {
         vm.stopPrank();
     }
 
+    function _updateWeeklyWithdrawLimit(uint16 share) internal {
+        vm.startPrank(owner);
+        afCvx.setWeeklyWithdrawShare(share);
+        afCvx.updateWeeklyWithdrawLimit();
+        vm.stopPrank();
+    }
+
     function _mockCleverTotalValue(uint256 deposited, uint256 rewards) internal {
         vm.mockCall(
             address(cleverCvxStrategy),
