@@ -22,6 +22,7 @@ import { Zap } from "./utils/Zap.sol";
 
 contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
     using SafeTransferLib for address;
+    using FixedPointMathLib for uint256;
 
     uint256 internal constant BASIS_POINT_SCALE = 10000;
 
@@ -83,6 +84,44 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         staked = _stakedCvxStrategyAssets();
     }
 
+    /// @notice Returns the maximum amount of assets (CVX) that can be withdrawn by the `owner`.
+    /// @dev Considers the remaining weekly withdrawal limit and the `owner`'s shares balance.
+    ///      See {IERC4626-maxWithdraw}
+    /// @param owner The address of the owner for which the maximum withdrawal amount is calculated.
+    /// @return maxAssets The maximum amount of assets that can be withdrawn by the `owner`.
+    function maxWithdraw(address owner)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256 maxAssets)
+    {
+        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawLimit);
+    }
+
+    /// @notice Returns the maximum amount of shares (afCVX) that can be redeemed by the `owner`.
+    /// @dev Considers the remaining weekly withdrawal limit converted to shares, and the `owner`'s shares balance.
+    ///      See {IERC4626-maxRedeem}
+    /// @param owner The address of the owner for which the maximum redeemable shares are calculated.
+    /// @return maxShares The maximum amount of shares that can be redeemed by the `owner`.
+    function maxRedeem(address owner)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256 maxShares)
+    {
+        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawLimit));
+    }
+
+    /// @notice Returns the maximum amount of assets (CVX) that can be unlocked by the `owner`.
+    /// @dev Considers the total CVX locked in Clever and the `owner`'s shares balance.
+    /// @param owner The address of the owner for which the maximum unlock amount is calculated.
+    /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
+    function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
+        return previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.totalLocked());
+    }
+
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
     function distribute(bool swap, uint256 minAmountOut) external onlyOperator {
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = previewDistribute();
@@ -121,39 +160,19 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
     }
 
-    function previewWithdraw(uint256 assets)
-        public
-        view
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        returns (uint256)
-    {
-        if (weeklyWithdrawLimit < assets) {
-            assets = weeklyWithdrawLimit;
-        }
-        return super.previewWithdraw(assets);
-    }
-
-    function previewRedeem(uint256 shares)
-        public
-        view
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        returns (uint256)
-    {
-        uint256 assets = super.previewRedeem(shares);
-        if (weeklyWithdrawLimit < assets) {
-            assets = weeklyWithdrawLimit;
-        }
-        return assets;
-    }
-
     function previewRequestUnlock(uint256 assets) public view returns (uint256 shares) {
-        uint256 totalLocked = cleverCvxStrategy.totalLocked();
-        shares = super.previewWithdraw(FixedPointMathLib.min(totalLocked, assets));
+        return previewWithdraw(assets);
     }
 
-    function requestUnlock(uint256 assets, address receiver, address owner) external returns (uint256 unlockEpoch, uint256 shares) {
+    function requestUnlock(uint256 assets, address receiver, address owner)
+        external
+        returns (uint256 unlockEpoch, uint256 shares)
+    {
+        uint256 maxAssets = maxRequestUnlock(owner);
+        if (assets > maxAssets) {
+            revert ExceededMaxUnlock(owner, assets, maxAssets);
+        }
+
         shares = previewRequestUnlock(assets);
         if (msg.sender != owner) {
             _spendAllowance(owner, msg.sender, shares);
@@ -161,7 +180,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
         _burn(owner, shares);
         unlockEpoch = cleverCvxStrategy.requestUnlock(assets, receiver);
-        
+
         emit UnlockRequested(msg.sender, receiver, owner, assets, shares, unlockEpoch);
     }
 
@@ -276,16 +295,14 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         virtual
         override
     {
-        if (assets > weeklyWithdrawLimit) {
-            assets = weeklyWithdrawLimit;
-        }
-        shares = previewWithdraw(assets);
         unchecked {
-            weeklyWithdrawLimit = weeklyWithdrawLimit - assets;
+            weeklyWithdrawLimit -= assets;
         }
+
         if (assets != 0) {
             CVX_REWARDS_POOL.withdraw(assets, false);
         }
+
         super._withdraw(caller, receiver, owner, assets, shares);
     }
 
