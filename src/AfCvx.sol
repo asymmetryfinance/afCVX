@@ -34,6 +34,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     uint16 public weeklyWithdrawShareBps;
     uint256 public weeklyWithdrawLimit;
     uint256 public withdrawLimitNextUpdate;
+    uint256 public withdrawalFeeCollected;
     address public protocolFeeCollector;
     address public operator;
 
@@ -99,6 +100,21 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return previewRedeem(balanceOf(owner)).min(weeklyWithdrawLimit);
     }
 
+    /// @notice Simulates the effects of assets withdrawal.
+    /// @dev Considers shares to assets ratio and the withdrawal fee.
+    /// @param assets The number of assets to withdraw.
+    /// @return The number of shares to be burnt.
+    function previewWithdraw(uint256 assets)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256)
+    {
+        uint256 fee = assets.mulDivUp(withdrawalFeeBps, BASIS_POINT_SCALE);
+        return super.previewWithdraw(assets + fee);
+    }
+
     /// @notice Returns the maximum amount of shares (afCVX) that can be redeemed by the `owner`.
     /// @dev Considers the remaining weekly withdrawal limit converted to shares, and the `owner`'s shares balance.
     ///      See {IERC4626-maxRedeem}
@@ -114,12 +130,28 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return balanceOf(owner).min(previewWithdraw(weeklyWithdrawLimit));
     }
 
+    /// @notice Simulates the effects of shares redemption.
+    /// @dev Considers shares to assets ratio and the withdrawal fee.
+    /// @param shares The number of shares to redeem.
+    /// @return The number of assets to be withdrawn.
+    function previewRedeem(uint256 shares)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256)
+    {
+        uint256 assets = super.previewRedeem(shares);
+        uint256 feeBps = withdrawalFeeBps;
+        return assets - assets.mulDivUp(feeBps, feeBps + BASIS_POINT_SCALE);
+    }
+
     /// @notice Returns the maximum amount of assets (CVX) that can be unlocked by the `owner`.
     /// @dev Considers the total CVX locked in Clever and the `owner`'s shares balance.
     /// @param owner The address of the owner for which the maximum unlock amount is calculated.
     /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
     function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
-        return previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.totalLocked());
+        return super.previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.totalLocked());
     }
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
@@ -161,7 +193,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     }
 
     function previewRequestUnlock(uint256 assets) public view returns (uint256 shares) {
-        return previewWithdraw(assets);
+        return super.previewWithdraw(assets);
     }
 
     function requestUnlock(uint256 assets, address receiver, address owner)
@@ -300,10 +332,25 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
 
         if (assets != 0) {
-            CVX_REWARDS_POOL.withdraw(assets, false);
+            if (withdrawalFeeCollected > assets) {
+                // use collected withdrawal fee to fulfill the withdrawal
+                unchecked {
+                    withdrawalFeeCollected -= assets;
+                }
+            } else {
+                // unstake CVX from Convex rewards pool
+                uint256 unstakeAmount;
+                withdrawalFeeCollected = 0;
+                unchecked {
+                    unstakeAmount = assets - withdrawalFeeCollected;
+                }
+                CVX_REWARDS_POOL.withdraw(unstakeAmount, false);
+            }
         }
 
         super._withdraw(caller, receiver, owner, assets, shares);
+
+        withdrawalFeeCollected += assets.mulDivUp(withdrawalFeeBps, BASIS_POINT_SCALE);
     }
 
     function _mulBps(uint256 value, uint256 bps) private pure returns (uint256) {
