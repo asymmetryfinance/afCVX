@@ -7,12 +7,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {IPirexLiquidityPool, _CVX, _PX_CVX} from "./interfaces/pirex/IPirexLiquidityPool.sol";
 import {IPirexCVX} from "./interfaces/pirex/IPirexCVX.sol";
 
-contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
+contract PirexMigrator is ERC1155Holder {
 
     using SafeERC20 for IERC20;
 
@@ -35,9 +34,9 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     // ============================================================================================
 
     constructor() {
-        CVX.approve(address(ASYMMETRY_CVX), type(uint256).max);
-        PX_CVX.approve(address(PIREX_LP), type(uint256).max);
-        // PX_CVX.approve(address(PIREX_CVX), type(uint256).max); // TODO
+        CVX.forceApprove(address(ASYMMETRY_CVX), type(uint256).max);
+        PX_CVX.forceApprove(address(PIREX_LP), type(uint256).max);
+        // PX_CVX.forceApprove(address(PIREX_CVX), type(uint256).max); // TODO
         UPX_CVX.setApprovalForAll(address(PIREX_CVX), true);
     }
 
@@ -46,7 +45,6 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     // ============================================================================================
 
     /// @notice Migrate uCVX/pxCVX to afCVX
-    /// @dev nonReentrant because not following CEI pattern
     /// @dev Migration using a swap will result in the `_receiver` receiving afCVX tokens immidiately
     ///      Migration not using a swap will result in the `_receiver` receiving upxCVX ERC1155 tokens
     ///      upxCVX can be redeemed for CVX and deposited into afCVX once the unlock time has passed using the other `migrate` function
@@ -63,20 +61,20 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
         address _receiver,
         bool _isUnionized,
         bool _isSwap
-    ) external nonReentrant returns (uint256) {
+    ) external returns (uint256) {
         if (_amount == 0) revert ZeroAmount();
         if (_receiver == address(0)) revert ZeroAddress();
 
         if (_isUnionized) {
-            UNION_CVX.redeem(_amount, address(this), msg.sender);
+            _amount = UNION_CVX.redeem(_amount, address(this), msg.sender);
         } else {
             PX_CVX.safeTransferFrom(msg.sender, address(this), _amount);
         }
 
-        _amount = PX_CVX.balanceOf(address(this));
         if (_isSwap) {
             if (_minSwapReceived == 0) revert ZeroAmount();
             PIREX_LP.swap(IPirexLiquidityPool.Token._PX_CVX, _amount, _minSwapReceived, FROM_INDEX, TO_INDEX);
+            _amount = ASYMMETRY_CVX.deposit(CVX.balanceOf(address(this)), _receiver);
         } else {
             uint256[] memory _assets = new uint256[](1);
             _assets[0] = _amount;
@@ -85,25 +83,23 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
             PIREX_CVX.initiateRedemptions(_lockIndexes, IPirexCVX.Futures.Reward, _assets, _receiver);
         }
 
-        _amount = CVX.balanceOf(address(this));
-        if (_amount > 0) ASYMMETRY_CVX.deposit(_amount, _receiver);
-
         emit Migrated(_amount, _receiver, _isSwap);
 
         return _amount;
     }
 
-    // TODO - netspac
-    // migrates upxCVX
-    /// @dev nonReentrant because not following CEI pattern
-    function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _assets, address _receiver) external nonReentrant {
+    /// @notice Migrate upxCVX to afCVX
+    /// @param _unlockTimes CVX unlock timestamps
+    /// @param _amounts upxCVX amounts
+    /// @param _receiver Receives afCVX
+    function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _amounts, address _receiver) external {
         if (_receiver == address(0)) revert ZeroAddress();
 
-        UPX_CVX.safeBatchTransferFrom(msg.sender, address(this), _unlockTimes, _assets, ""); // TODO - this section may be faulty
-        PIREX_CVX.redeem(_unlockTimes, _assets, address(this));
+        UPX_CVX.safeBatchTransferFrom(msg.sender, address(this), _unlockTimes, _amounts, ""); // TODO - this section may be faulty
+        PIREX_CVX.redeem(_unlockTimes, _amounts, address(this));
 
         uint256 _amount = CVX.balanceOf(address(this));
-        if (_amount > 0) ASYMMETRY_CVX.deposit(_amount, _receiver);
+        if (_amount > 0) _amount = ASYMMETRY_CVX.deposit(_amount, _receiver);
 
         emit MigratedAfterRedemption(_amount, _receiver);
     }
@@ -112,8 +108,8 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     // Events
     // ============================================================================================
 
-    event Migrated(uint256 amount, address indexed receiver, bool indexed isSwap);
-    event MigratedAfterRedemption(uint256 amount, address indexed receiver);
+    event Migrated(uint256 shares, address indexed receiver, bool indexed isSwap);
+    event MigratedAfterRedemption(uint256 shares, address indexed receiver);
 
     // ============================================================================================
     // Errors
