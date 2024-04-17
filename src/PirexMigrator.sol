@@ -108,7 +108,13 @@ contract PirexMigrator is ERC1155Holder {
     // Events
     // ============================================================================================
 
+    /// @param shares Amount of afCVX or CVX, depending on if a swap was used
+    /// @param receiver Receives of afCVX or upxCVX tokens
+    /// @param isSwap True if the user swaped pxCVX for CVX, false if the user redeemed pxCVX for upxCVX
     event Migrated(uint256 shares, address indexed receiver, bool indexed isSwap);
+
+    /// @param shares Amount of afCVX
+    /// @param receiver Receives of afCVX
     event MigratedAfterRedemption(uint256 shares, address indexed receiver);
 
     // ============================================================================================
