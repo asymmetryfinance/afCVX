@@ -11,6 +11,9 @@ import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155
 import {IPirexLiquidityPool, _CVX, _PX_CVX} from "./interfaces/pirex/IPirexLiquidityPool.sol";
 import {IPirexCVX} from "./interfaces/pirex/IPirexCVX.sol";
 
+/// @title PirexMigrator
+/// @author johnnyonline (https://github.com/johnnyonline)
+/// @notice Migrate uCVX/pxCVX/upxCVX to afCVX
 contract PirexMigrator is ERC1155Holder {
 
     using SafeERC20 for IERC20;
@@ -24,7 +27,8 @@ contract PirexMigrator is ERC1155Holder {
     IERC1155 public constant UPX_CVX = IERC1155(0x7A3D81CFC5A942aBE9ec656EFF818f7daB4E0Fe1);
 
     IERC4626 public constant UNION_CVX = IERC4626(0x8659Fc767cad6005de79AF65dAfE4249C57927AF);
-    IERC4626 public constant ASYMMETRY_CVX = IERC4626(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B); // TODO
+    // IERC4626 public constant ASYMMETRY_CVX = IERC4626(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B); // TODO
+    IERC4626 public immutable ASYMMETRY_CVX;
 
     IPirexCVX public constant PIREX_CVX = IPirexCVX(0x35A398425d9f1029021A92bc3d2557D42C8588D7);
     IPirexLiquidityPool public constant PIREX_LP = IPirexLiquidityPool(0x389fB29230D02e67eB963C1F5A00f2b16f95BEb7);
@@ -33,7 +37,9 @@ contract PirexMigrator is ERC1155Holder {
     // Constructor
     // ============================================================================================
 
-    constructor() {
+    constructor(address _afCVX) {
+        ASYMMETRY_CVX = IERC4626(_afCVX); // TODO
+
         CVX.forceApprove(address(ASYMMETRY_CVX), type(uint256).max);
         PX_CVX.forceApprove(address(PIREX_LP), type(uint256).max);
         // PX_CVX.forceApprove(address(PIREX_CVX), type(uint256).max); // TODO
@@ -54,6 +60,7 @@ contract PirexMigrator is ERC1155Holder {
     /// @param _receiver Receives of afCVX or upxCVX tokens
     /// @param _isUnionized True if the user is migrating from uCVX, false if the user is migrating from pxCVX
     /// @param _isSwap True if the user wants to swap uCVX/pxCVX for CVX, false if the user wants to redeem uCVX/pxCVX for upxCVX
+    /// @return shares Amount of afCVX sent to the `_receiver`
     function migrate(
         uint256 _amount,
         uint256 _minSwapReceived,
@@ -81,6 +88,8 @@ contract PirexMigrator is ERC1155Holder {
             uint256[] memory _lockIndexes = new uint256[](1);
             _lockIndexes[0] = _lockIndex;
             PIREX_CVX.initiateRedemptions(_lockIndexes, IPirexCVX.Futures.Reward, _assets, _receiver);
+
+            _amount = 0;
         }
 
         emit Migrated(_amount, _receiver, _isSwap);
@@ -92,13 +101,14 @@ contract PirexMigrator is ERC1155Holder {
     /// @param _unlockTimes CVX unlock timestamps
     /// @param _amounts upxCVX amounts
     /// @param _receiver Receives afCVX
-    function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _amounts, address _receiver) external {
+    /// @return _amount Amount of afCVX sent to the `_receiver`
+    function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _amounts, address _receiver) external returns (uint256 _amount) {
         if (_receiver == address(0)) revert ZeroAddress();
 
         UPX_CVX.safeBatchTransferFrom(msg.sender, address(this), _unlockTimes, _amounts, ""); // TODO - this section may be faulty
         PIREX_CVX.redeem(_unlockTimes, _amounts, address(this));
 
-        uint256 _amount = CVX.balanceOf(address(this));
+        _amount = CVX.balanceOf(address(this));
         if (_amount > 0) _amount = ASYMMETRY_CVX.deposit(_amount, _receiver);
 
         emit MigratedAfterRedemption(_amount, _receiver);
@@ -108,13 +118,13 @@ contract PirexMigrator is ERC1155Holder {
     // Events
     // ============================================================================================
 
-    /// @param shares Amount of afCVX or CVX, depending on if a swap was used
-    /// @param receiver Receives of afCVX or upxCVX tokens
+    /// @param shares Amount of afCVX sent to the `_receiver`. 0 if no swap was made
+    /// @param receiver Receiver of afCVX or upxCVX tokens
     /// @param isSwap True if the user swaped pxCVX for CVX, false if the user redeemed pxCVX for upxCVX
     event Migrated(uint256 shares, address indexed receiver, bool indexed isSwap);
 
     /// @param shares Amount of afCVX
-    /// @param receiver Receives of afCVX
+    /// @param receiver Receiver of afCVX
     event MigratedAfterRedemption(uint256 shares, address indexed receiver);
 
     // ============================================================================================

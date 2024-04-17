@@ -2,7 +2,7 @@
 pragma solidity 0.8.25;
 
 address constant _CVX = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B;
-address constant _PX_CVX = 0x389fB29230D02e67eB963C1F5A00f2b16f95BEb7;
+address constant _PX_CVX = 0xBCe0Cf87F513102F22232436CCa2ca49e815C3aC;
 
 interface IPirexLiquidityPool {
 
