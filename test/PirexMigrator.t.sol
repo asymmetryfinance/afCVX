@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import {ICvxLocker} from "../src/interfaces/convex/ICvxLocker.sol";
-
-import {PirexMigrator} from "../src/PirexMigrator.sol";
+import {PirexMigrator, ICVXLocker, IPirexCVX} from "../src/PirexMigrator.sol";
 
 import {BaseForkTest} from "./utils/BaseForkTest.sol";
 
@@ -12,8 +10,6 @@ contract PirexMigratorTests is BaseForkTest {
     address payable public user;
 
     PirexMigrator public migrator;
-
-    ICvxLocker public cvxLocker = ICvxLocker(0x72a19342e8F1838460eBFCCEf09F6585e32db86E);
 
     // ============================================================================================
     // Setup
@@ -98,12 +94,56 @@ contract PirexMigratorTests is BaseForkTest {
         assertTrue(_afCVXReceived > 0, "testMigrateUnionCVXWithSwap: E8");
     }
 
-    function testMigrateWithRedeem(uint256 _amount) public {
+    function testMigrateNoSwap(uint256 _amount) public {
         vm.assume(_amount > 0.1 ether && _amount < 100 ether);
 
         _dealPirexCVX(_amount, user);
 
-        (,,,ICvxLocker.LockedBalance[] memory _lockData) = cvxLocker.lockedBalances(address(migrator.PIREX_CVX()));
+        (,,,ICVXLocker.LockedBalance[] memory _lockData) = migrator.CVX_LOCKER().lockedBalances(address(migrator.PIREX_CVX()));
+
+        uint256 _lockIndex = 0;
+        uint256 _unlockTime = _lockData[0].unlockTime;
+        uint256 _upxCVXUserBalanceBefore = migrator.UPX_CVX().balanceOf(user, _unlockTime);
+        uint256 _upxCVXMigratorBalanceBefore = migrator.UPX_CVX().balanceOf(address(migrator), _unlockTime);
+
+        vm.startPrank(user);
+
+        migrator.PX_CVX().approve(address(migrator), _amount);
+
+        uint256 _upxCVXCredited = migrator.migrate(_amount, 0, _lockIndex, user, false, false);
+
+        uint256 _upxCVXUserBalanceAfter = migrator.UPX_CVX().balanceOf(user, _unlockTime);
+        uint256 _upxCVXMigratorBalanceAfter = migrator.UPX_CVX().balanceOf(address(migrator), _unlockTime);
+
+        assertEq(_upxCVXCredited, _upxCVXMigratorBalanceAfter, "testMigrateUnionCVXWithSwap: E0");
+        assertEq(_upxCVXUserBalanceBefore, 0, "testMigrateUnionCVXWithSwap: E1");
+        assertEq(_upxCVXMigratorBalanceBefore, 0, "testMigrateUnionCVXWithSwap: E2");
+        assertEq(_upxCVXUserBalanceAfter, 0, "testMigrateUnionCVXWithSwap: E3");
+        assertTrue(_upxCVXMigratorBalanceAfter > 0, "testMigrateUnionCVXWithSwap: E4");
+
+        skip(_unlockTime - block.timestamp);
+
+        uint256[] memory _unlockTimes = new uint256[](1);
+        _unlockTimes[0] = _unlockTime;
+
+        address[] memory _fors = new address[](1);
+        _fors[0] = user;
+        _amount = migrator.multiRedeem(_unlockTimes, _fors);
+
+        assertEq(migrator.UPX_CVX().balanceOf(user, _unlockTime), 0, "testMigrateUnionCVXWithSwap: E5");
+        assertEq(migrator.ASYMMETRY_CVX().balanceOf(user), _amount, "testMigrateUnionCVXWithSwap: E6");
+        assertEq(migrator.UPX_CVX().balanceOf(address(migrator), _unlockTime), 0, "testMigrateUnionCVXWithSwap: E7");
+        assertTrue(_amount > 0, "testMigrateUnionCVXWithSwap: E8");
+
+        vm.stopPrank();
+    }
+
+    function testMigrateWithUnlockingPirexCVX(uint256 _amount) public {
+        vm.assume(_amount > 0.1 ether && _amount < 100 ether);
+
+        _dealPirexCVX(_amount, user);
+
+        (,,,ICVXLocker.LockedBalance[] memory _lockData) = migrator.CVX_LOCKER().lockedBalances(address(migrator.PIREX_CVX()));
 
         uint256 _lockIndex = 0;
         uint256 _unlockTime = _lockData[0].unlockTime;
@@ -113,11 +153,16 @@ contract PirexMigratorTests is BaseForkTest {
 
         migrator.PX_CVX().approve(address(migrator), _amount);
 
-        uint256 _afCVXReceived = migrator.migrate(_amount, 0, _lockIndex, user, false, false);
+        {
+            uint256[] memory _assets = new uint256[](1);
+            _assets[0] = _amount;
+            uint256[] memory _lockIndexes = new uint256[](1);
+            _lockIndexes[0] = _lockIndex;
+            migrator.PIREX_CVX().initiateRedemptions(_lockIndexes, IPirexCVX.Futures.Reward, _assets, user);
+        }
 
         uint256 _upxCVXBalanceAfter = migrator.UPX_CVX().balanceOf(user, _unlockTime);
 
-        assertEq(_afCVXReceived, 0, "testMigrateUnionCVXWithSwap: E0");
         assertEq(_upxCVXBalanceBefore, 0, "testMigrateUnionCVXWithSwap: E1");
         assertTrue(_upxCVXBalanceAfter > 0, "testMigrateUnionCVXWithSwap: E2");
 
