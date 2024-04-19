@@ -17,6 +17,7 @@ interface ICleverCvxStrategy {
     error InsufficientFurnaceBalance();
 
     event OperatorSet(address indexed newOperator);
+    event EmergencyShutdown();
 
     function totalValue() external view returns (uint256 deposited, uint256 rewards);
     function totalLocked() external view returns (uint256);
@@ -26,4 +27,5 @@ interface ICleverCvxStrategy {
     function requestUnlock(uint256 amount, address to) external returns (uint256 unlockEpoch);
     function withdrawUnlocked(address account) external returns (uint256 cvxUnlocked);
     function setOperator(address newOperator) external;
+    function emergencyShutdown() external;
 }

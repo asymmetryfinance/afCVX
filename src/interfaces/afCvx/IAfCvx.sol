@@ -10,6 +10,7 @@ interface IAfCvx is IERC4626 {
     error InvalidAddress();
     error DirectEthTransfer();
     error ExceededMaxUnlock(address owner, uint256 assets, uint256 max);
+    error Paused();
 
     event CleverCvxStrategyShareSet(uint256 indexed newShare);
     event ProtocolFeeSet(uint256 indexed newProtocolFee);

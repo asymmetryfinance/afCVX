@@ -5,9 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { CVX } from "src/interfaces/convex/Constants.sol";
-import { CLEVCVX } from "src/interfaces/clever/Constants.sol";
 import { CVX_REWARDS_POOL } from "src/interfaces/convex/ICvxRewardsPool.sol";
-import { CLEVER_CVX_LOCKER, EpochUnlockInfo } from "src/interfaces/clever/ICLeverCVXLocker.sol";
 import { FURNACE } from "src/interfaces/clever/IFurnace.sol";
 import { SimpleProxyFactory } from "src/utils/SimpleProxyFactory.sol";
 import { CleverCvxStrategy } from "src/strategies/CleverCvxStrategy.sol";
@@ -104,6 +102,7 @@ abstract contract BaseForkTest is Test {
         afCvx.distribute(false, 0);
         vm.roll(block.number + 1);
         cleverCvxStrategy.borrow();
+        vm.roll(block.number + 1);
         vm.stopPrank();
     }
 
@@ -132,6 +131,13 @@ abstract contract BaseForkTest is Test {
         vm.startPrank(owner);
         afCvx.setWeeklyWithdrawShare(share);
         afCvx.updateWeeklyWithdrawLimit();
+        vm.stopPrank();
+    }
+
+    function _setFees(uint16 protocolFee, uint16 withdrawalFee) internal {
+        vm.startPrank(owner);
+        afCvx.setProtocolFee(protocolFee);
+        afCvx.setWithdrawalFee(withdrawalFee);
         vm.stopPrank();
     }
 
