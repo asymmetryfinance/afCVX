@@ -192,6 +192,13 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
+    /// @notice Pauses deposits and withdrawals.
+    /// @dev Called in emergencies to stop all calls and transfers until further notice.
+    function emergencyShutdown() external onlyManager {
+        _emergencyRevokeAllAllowances();
+        emit EmergencyShutdown();
+    }
+
     function setOperator(address newOperator) external onlyOwner {
         if (newOperator != address(0)) revert InvalidAddress();
         operator = newOperator;
