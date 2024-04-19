@@ -21,7 +21,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
 
     using SafeERC20 for IERC20;
 
-    mapping(address => mapping(uint256 => uint256)) public balances; // receiver => unlockTime => amount
+    mapping(address receiver => mapping(uint256 unlockTime => uint256 amount)) public balances;
 
     uint256 public constant FROM_INDEX = 1; // lpxCVX
     uint256 public constant TO_INDEX = 0; // CVX
@@ -62,8 +62,8 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     ///      Internally credited upxCVX can be redeemed for CVX and deposited into afCVX once the unlock time has passed using the `redeem` function.
     /// @param _amount Amount of uCVX/pxCVX
     /// @param _minSwapReceived Minimum amount of CVX to receive from the swap. Only used if `_isSwap` is true
-    /// @param _lockIndex Locked balance index
-    /// @param _receiver Receives of afCVX or upxCVX tokens
+    /// @param _lockIndex Lock index
+    /// @param _receiver Receiver of afCVX or upxCVX tokens
     /// @param _isUnionized True if the user is migrating from uCVX, false if the user is migrating from pxCVX
     /// @param _isSwap True if the user wants to swap uCVX/pxCVX for CVX, false if the user wants to redeem uCVX/pxCVX for upxCVX
     /// @return Amount of afCVX sent or upxCVX credited to the `_receiver`
@@ -100,7 +100,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @notice Migrate upxCVX to afCVX
     /// @param _unlockTimes CVX unlock timestamps
     /// @param _amounts upxCVX amounts
-    /// @param _receiver Receives afCVX
+    /// @param _receiver Receiver of afCVX
     /// @return _amount Amount of afCVX sent to the `_receiver`
     function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _amounts, address _receiver) external returns (uint256 _amount) {
         if (_receiver == address(0)) revert ZeroAddress();
