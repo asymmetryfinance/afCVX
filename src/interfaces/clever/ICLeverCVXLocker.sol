@@ -42,4 +42,6 @@ interface ICleverCvxLocker {
     function borrow(uint256 amount, bool depositToFurnace) external;
 
     function harvest(address recipient, uint256 minimumOut) external returns (uint256);
+
+    function processUnlockableCVX() external;
 }

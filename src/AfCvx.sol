@@ -3,10 +3,9 @@ pragma solidity 0.8.25;
 
 import { Ownable } from "solady/auth/Ownable.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC20PermitUpgradeable } from
     "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -34,7 +33,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     uint16 public weeklyWithdrawShareBps;
     uint256 public weeklyWithdrawLimit;
     uint256 public withdrawLimitNextUpdate;
-    uint256 public withdrawalFeeCollected;
     address public protocolFeeCollector;
     address public operator;
 
@@ -332,25 +330,18 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         }
 
         if (assets != 0) {
-            if (withdrawalFeeCollected > assets) {
-                // use collected withdrawal fee to fulfill the withdrawal
-                unchecked {
-                    withdrawalFeeCollected -= assets;
-                }
-            } else {
+            uint256 cvxAvailable = CVX.balanceOf(address(this));
+            if (cvxAvailable < assets) {
                 // unstake CVX from Convex rewards pool
                 uint256 unstakeAmount;
-                withdrawalFeeCollected = 0;
                 unchecked {
-                    unstakeAmount = assets - withdrawalFeeCollected;
+                    unstakeAmount = assets - cvxAvailable;
                 }
                 CVX_REWARDS_POOL.withdraw(unstakeAmount, false);
             }
         }
 
         super._withdraw(caller, receiver, owner, assets, shares);
-
-        withdrawalFeeCollected += assets.mulDivUp(withdrawalFeeBps, BASIS_POINT_SCALE);
     }
 
     function _mulBps(uint256 value, uint256 bps) private pure returns (uint256) {

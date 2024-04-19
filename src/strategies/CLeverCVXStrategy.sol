@@ -2,11 +2,10 @@
 pragma solidity 0.8.25;
 
 import { Ownable } from "solady/auth/Ownable.sol";
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-import { IAfCvx } from "../interfaces/afCvx/IAfCvx.sol";
 import { ICleverCvxStrategy } from "../interfaces/afCvx/ICleverCvxStrategy.sol";
 import { TrackedAllowances, Allowance } from "../utils/TrackedAllowances.sol";
 import { Zap } from "../utils/Zap.sol";
@@ -17,6 +16,7 @@ import { CLEVCVX } from "../interfaces/clever/Constants.sol";
 
 contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UUPSUpgradeable {
     using SafeTransferLib for address;
+    using FixedPointMathLib for uint256;
 
     /// @dev The denominator used for CLever fee calculation.
     uint256 private constant CLEVER_FEE_PRECISION = 1e9;
@@ -28,7 +28,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice The total amount of CVX unlock obligations.
     uint256 internal unlockObligations;
 
-    mapping(address => UnlockInfo) requestedUnlocks;
+    mapping(address => UnlockInfo) public requestedUnlocks;
 
     modifier onlyManager() {
         if (msg.sender != manager) revert Unauthorized();
@@ -204,13 +204,13 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function _calculateMaxBorrowAmount() private view returns (uint256) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        return totalDeposited * reserveRate / CLEVER_FEE_PRECISION - totalBorrowed;
+        return totalDeposited.mulDiv(reserveRate, CLEVER_FEE_PRECISION) - totalBorrowed;
     }
 
     function _calculateRepayAmount(uint256 _lockedCVX) private view returns (uint256 repayAmount, uint256 repayFee) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
-        repayAmount = _lockedCVX * reserveRate / CLEVER_FEE_PRECISION;
-        repayFee = repayAmount * repayRate / CLEVER_FEE_PRECISION;
+        repayAmount = _lockedCVX.mulDivUp(reserveRate, CLEVER_FEE_PRECISION);
+        repayFee = repayAmount.mulDivUp(repayRate, CLEVER_FEE_PRECISION);
     }
 }
