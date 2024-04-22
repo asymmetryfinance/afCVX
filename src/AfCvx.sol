@@ -17,6 +17,7 @@ import { IAfCvx } from "./interfaces/afCvx/IAfCvx.sol";
 import { ICleverCvxStrategy } from "./interfaces/afCvx/ICleverCvxStrategy.sol";
 import { CVX } from "./interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "./interfaces/convex/ICvxRewardsPool.sol";
+import { CLEVER_CVX_LOCKER } from "./interfaces/clever/ICLeverCvxLocker.sol";
 import { Zap } from "./utils/Zap.sol";
 
 contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
@@ -28,16 +29,16 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     ICleverCvxStrategy public immutable cleverCvxStrategy;
 
     uint16 public protocolFeeBps;
-    uint16 public withdrawalFeeBps;
-    uint16 public weeklyWithdrawShareBps;
     address public protocolFeeCollector;
 
-    bool public paused;
     uint16 public cleverStrategyShareBps;
     address public operator;
 
-    uint256 public weeklyWithdrawLimit;
-    uint256 public withdrawLimitNextUpdate;
+    bool public paused;
+    uint128 public weeklyWithdrawalLimit;
+    uint16 public withdrawalFeeBps;
+    uint64 public withdrawalLimitNextUpdate;
+    uint16 public weeklyWithdrawalShareBps;
 
     modifier onlyOperator() {
         if (msg.sender != owner()) {
@@ -81,11 +82,15 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     }
 
     function totalAssets() public view override(ERC4626Upgradeable, IERC4626) returns (uint256) {
-        (uint256 unlocked, uint256 lockedInClever, uint256 staked) = getAvailableAssets();
+        (uint256 unlocked, uint256 lockedInClever, uint256 staked) = _getAvailableAssets();
         return unlocked + lockedInClever + staked;
     }
 
-    function getAvailableAssets() public view returns (uint256 unlocked, uint256 lockedInClever, uint256 staked) {
+    function getAvailableAssets() external view returns (uint256 unlocked, uint256 lockedInClever, uint256 staked) {
+        (unlocked, lockedInClever, staked) = _getAvailableAssets();
+    }
+
+    function _getAvailableAssets() private view returns (uint256 unlocked, uint256 lockedInClever, uint256 staked) {
         unlocked = CVX.balanceOf(address(this));
 
         // NOTE: clevCVX is assumed to be 1:1 with CVX
@@ -95,27 +100,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         // NOTE: we consider only staked CVX in Convex and ignore the rewards, as they are paid in cvxCRV
         // and there is no reliable way to get cvxCRV to CVX price on chain
         staked = CVX_REWARDS_POOL.balanceOf(address(this));
-    }
-
-    function previewDistribute() public view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount) {
-        (uint256 unlocked, uint256 lockedInClever, uint256 staked) = getAvailableAssets();
-        if (unlocked == 0) return (0, 0);
-
-        uint256 totalLocked = lockedInClever + staked;
-        uint256 targetLockedInClever = _mulBps(unlocked + totalLocked, cleverStrategyShareBps);
-        if (targetLockedInClever >= lockedInClever) {
-            uint256 delta;
-            unchecked {
-                delta = targetLockedInClever - lockedInClever;
-            }
-            cleverDepositAmount = delta > unlocked ? unlocked : delta;
-        }
-
-        if (unlocked > cleverDepositAmount) {
-            unchecked {
-                convexStakeAmount = unlocked - cleverDepositAmount;
-            }
-        }
     }
 
     /// @notice Mints `shares` (afCVX) to `receiver` by depositing exactly `assets` of CVX tokens.
@@ -150,6 +134,22 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return super.mint(shares, receiver);
     }
 
+    /// @dev Copied from ERC4626Upgradeable to avoid unnecessary SLOAD of $._asset since _asset is a constant
+    ///      https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol#L267
+    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal virtual override {
+        // If _asset is ERC777, `transferFrom` can trigger a reentrancy BEFORE the transfer happens through the
+        // `tokensToSend` hook. On the other hand, the `tokenReceived` hook, that is triggered after the transfer,
+        // calls the vault, which is assumed not malicious.
+        //
+        // Conclusion: we need to do the transfer before we mint so that any reentrancy would happen before the
+        // assets are transferred and before the shares are minted, which is a valid state.
+        // slither-disable-next-line reentrancy-no-eth
+        address(CVX).safeTransferFrom(caller, address(this), assets);
+        _mint(receiver, shares);
+
+        emit Deposit(caller, receiver, assets, shares);
+    }
+
     /// @notice Returns the maximum amount of assets (CVX) that can be withdrawn by the `owner`.
     /// @dev Considers the remaining weekly withdrawal limit and the `owner`'s shares balance.
     ///      See {IERC4626-maxWithdraw}
@@ -162,7 +162,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxAssets)
     {
-        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawLimit);
+        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit);
     }
 
     /// @notice Simulates the effects of assets withdrawal.
@@ -212,7 +212,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxShares)
     {
-        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawLimit));
+        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit));
     }
 
     /// @notice Simulates the effects of shares redemption.
@@ -257,7 +257,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override
     {
         unchecked {
-            weeklyWithdrawLimit -= assets;
+            weeklyWithdrawalLimit -= uint128(assets);
         }
 
         if (assets != 0) {
@@ -272,7 +272,22 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
             }
         }
 
-        super._withdraw(caller, receiver, owner, assets, shares);
+        // Copied from ERC4626Upgradeable to avoid unnecessary SLOAD of $._asset since _asset is a constant
+        // https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol#L292
+        if (caller != owner) {
+            _spendAllowance(owner, caller, shares);
+        }
+
+        // If _asset is ERC777, `transfer` can trigger a reentrancy AFTER the transfer happens through the
+        // `tokensReceived` hook. On the other hand, the `tokensToSend` hook, that is triggered before the transfer,
+        // calls the vault, which is assumed not malicious.
+        //
+        // Conclusion: we need to do the transfer after the burn so that any reentrancy would happen after the
+        // shares are burned and after the assets are transferred, which is a valid state.
+        _burn(owner, shares);
+        address(CVX).safeTransfer(receiver, assets);
+
+        emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
     /// @notice Returns the maximum amount of assets (CVX) that can be unlocked by the `owner`.
@@ -280,7 +295,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @param owner The address of the owner for which the maximum unlock amount is calculated.
     /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
     function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
-        return super.previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.totalLocked());
+        (uint256 totalLocked,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
+        return super.previewRedeem(balanceOf(owner)).min(totalLocked);
     }
 
     /// @notice Simulates the effects of assets unlocking.
@@ -327,25 +343,49 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     function withdrawUnlocked(address receiver) external whenNotPaused {
         uint256 cvxUnlocked = cleverCvxStrategy.withdrawUnlocked(receiver);
         if (cvxUnlocked != 0) {
-            address(CVX).safeTransfer(receiver, cvxUnlocked);
             emit UnlockedWithdrawn(msg.sender, receiver, cvxUnlocked);
         }
     }
 
-    function updateWeeklyWithdrawLimit() external {
-        _updateWeeklyWithdrawLimit();
+    function updateWeeklyWithdrawalLimit() external {
+        _updateWeeklyWithdrawalLimit();
     }
 
-    function _updateWeeklyWithdrawLimit() private {
-        if (block.timestamp < withdrawLimitNextUpdate) return;
+    function _updateWeeklyWithdrawalLimit() private {
+        if (block.timestamp < withdrawalLimitNextUpdate) return;
 
         uint256 tvl = totalAssets();
-        uint256 withdrawLimit = _mulBps(tvl, weeklyWithdrawShareBps);
-        uint256 nextUpdate = block.timestamp + 7 days;
-        weeklyWithdrawLimit = withdrawLimit;
-        withdrawLimitNextUpdate = nextUpdate;
+        uint128 withdrawalLimit = uint128(_mulBps(tvl, weeklyWithdrawalShareBps));
+        uint64 nextUpdate = uint64(block.timestamp + 7 days);
+        weeklyWithdrawalLimit = withdrawalLimit;
+        withdrawalLimitNextUpdate = nextUpdate;
 
-        emit WeeklyWithdrawLimitUpdated(withdrawLimit, nextUpdate);
+        emit WeeklyWithdrawLimitUpdated(withdrawalLimit, nextUpdate);
+    }
+
+    function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount) {
+        (cleverDepositAmount, convexStakeAmount) = _previewDistribute();
+    }
+
+    function _previewDistribute() private view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount) {
+        (uint256 unlocked, uint256 lockedInClever, uint256 staked) = _getAvailableAssets();
+        if (unlocked == 0) return (0, 0);
+
+        uint256 totalLocked = lockedInClever + staked;
+        uint256 targetLockedInClever = _mulBps(unlocked + totalLocked, cleverStrategyShareBps);
+        if (targetLockedInClever >= lockedInClever) {
+            uint256 delta;
+            unchecked {
+                delta = targetLockedInClever - lockedInClever;
+            }
+            cleverDepositAmount = delta > unlocked ? unlocked : delta;
+        }
+
+        if (unlocked > cleverDepositAmount) {
+            unchecked {
+                convexStakeAmount = unlocked - cleverDepositAmount;
+            }
+        }
     }
 
     /////////////////////////////////////////////////////////////////
@@ -354,7 +394,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
     function distribute(bool swap, uint256 minAmountOut) external onlyOperator {
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = _previewDistribute();
 
         if (cleverDepositAmount == 0 && convexStakeAmount == 0) return;
 
@@ -390,7 +430,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
             emit Harvested(cleverRewards, convexStakedRewards);
         }
 
-        _updateWeeklyWithdrawLimit();
+        _updateWeeklyWithdrawalLimit();
     }
 
     /////////////////////////////////////////////////////////////////
@@ -435,7 +475,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @param newShareBps New weekly withdraw share.
     function setWeeklyWithdrawShare(uint16 newShareBps) external onlyOwner {
         if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
-        weeklyWithdrawShareBps = newShareBps;
+        weeklyWithdrawalShareBps = newShareBps;
         emit WeeklyWithdrawShareSet(newShareBps);
     }
 

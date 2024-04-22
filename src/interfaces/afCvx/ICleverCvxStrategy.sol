@@ -15,12 +15,12 @@ interface ICleverCvxStrategy {
 
     error InvalidAddress();
     error InsufficientFurnaceBalance();
+    error UnlockInProgress();
 
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();
 
     function totalValue() external view returns (uint256 deposited, uint256 rewards);
-    function totalLocked() external view returns (uint256);
     function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external;
     function borrow() external;
     function claim() external returns (uint256);

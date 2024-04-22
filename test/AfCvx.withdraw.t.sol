@@ -25,8 +25,8 @@ contract AfCvxWithdrawForkTest is BaseForkTest {
         vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxWithdraw.selector, user, assets, 0));
         afCvx.withdraw(assets, user, user);
 
-        _updateWeeklyWithdrawLimit(1000); // 10%
-        assertEq(afCvx.weeklyWithdrawLimit(), 10e18);
+        _updateWeeklyWithdrawalLimit(1000); // 10%
+        assertEq(afCvx.weeklyWithdrawalLimit(), 10e18);
 
         uint256 maxWithdraw = afCvx.maxWithdraw(user);
         uint256 preview = afCvx.previewWithdraw(maxWithdraw);
@@ -84,8 +84,8 @@ contract AfCvxWithdrawForkTest is BaseForkTest {
         vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxRedeem.selector, user, assets, 0));
         afCvx.redeem(assets, user, user);
 
-        _updateWeeklyWithdrawLimit(1000); // 10%
-        assertEq(afCvx.weeklyWithdrawLimit(), 100e18);
+        _updateWeeklyWithdrawalLimit(1000); // 10%
+        assertEq(afCvx.weeklyWithdrawalLimit(), 100e18);
 
         uint256 maxRedeem = afCvx.maxRedeem(user);
         uint256 preview = afCvx.previewRedeem(maxRedeem);
