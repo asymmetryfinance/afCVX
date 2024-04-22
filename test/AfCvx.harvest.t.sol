@@ -10,22 +10,22 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         uint256 amount = 100 ether;
         _deposit(amount);
 
-        assertEq(afCvx.weeklyWithdrawLimit(), 0);
+        assertEq(afCvx.weeklyWithdrawalLimit(), 0);
 
         _distributeAndBorrow();
 
         // 1% protocolFee, 1% withdrawal fee
         _setFees(100, 100);
         // 2% of TVL can be withdrawn
-        _updateWeeklyWithdrawLimit(200);
+        _updateWeeklyWithdrawalLimit(200);
 
         vm.prank(operator);
         uint256 rewards = afCvx.harvest(0);
 
         assertEq(rewards, 0);
         // weekly withdraw limit is updated when harvesting rewards
-        assertEq(afCvx.weeklyWithdrawLimit(), 2 ether);
-        assertEq(afCvx.withdrawLimitNextUpdate(), block.timestamp + 1 weeks);
+        assertEq(afCvx.weeklyWithdrawalLimit(), 2 ether);
+        assertEq(afCvx.withdrawalLimitNextUpdate(), block.timestamp + 1 weeks);
 
         skip(1 weeks);
         // simulate Furnace rewards
@@ -46,7 +46,7 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // 1% protocolFee, 1% withdrawal fee
         _setFees(100, 100);
         // 2% of TVL can be withdrawn
-        _updateWeeklyWithdrawLimit(200);
+        _updateWeeklyWithdrawalLimit(200);
 
         _deposit(500_000 ether);
         _distributeAndBorrow();
@@ -75,7 +75,7 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // 1% protocolFee, 1% withdrawal fee
         _setFees(100, 100);
         // 2% of TVL can be withdrawn
-        _updateWeeklyWithdrawLimit(200);
+        _updateWeeklyWithdrawalLimit(200);
 
         _deposit(1_000_000 ether);
         _distributeAndBorrow();

@@ -113,11 +113,19 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
-    /// @notice requests to unlock CVX
+    /// @notice Requests to unlock CVX
+    /// @param amount The amount of CVX tokens to unlock
+    /// @param account The address to receive CVX after the unlock period is over
+    /// @return unlockEpoch The epoch number when all the requested CVX can be withdrawn
     function requestUnlock(uint256 amount, address account) external onlyManager returns (uint256 unlockEpoch) {
         unlockObligations += amount;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
+
+        // retrieve an array of locked CVX and the epoch it can be unlocked starting from the next epoch
+        // See https://github.com/AladdinDAO/aladdin-v3-contracts/blob/main/contracts/clever/CLeverCVXLocker.sol#L259
+        // for implementation details
         (EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
+
         uint256 locksLength = locks.length;
         for (uint256 i; i < locksLength; i++) {
             uint256 locked = locks[i].pendingUnlock;
@@ -133,7 +141,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
-    /// @notice withdraws unlocked CVX
+    /// @notice Withdraws CVX that became unlocked by the current epoch.
+    ///         The unlock must be requested prior by calling `requestUnlock` function
+    /// @param account The address to receive unlocked CVX
+    /// @return cvxUnlocked The amount of unlocked CVX sent to `account`
     function withdrawUnlocked(address account) external onlyManager returns (uint256 cvxUnlocked) {
         uint256 currentEpoch = block.timestamp / REWARDS_DURATION;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
@@ -150,6 +161,8 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
                 break;
             }
         }
+
+        // update the index of the next unlock since we don't resize the array to save gas
         requestedUnlocks[account].nextUnlockIndex = nextUnlockIndex;
 
         if (cvxUnlocked == 0) return cvxUnlocked;
@@ -159,11 +172,14 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         if (cvxAvailable < cvxUnlocked) {
             (,, uint256 totalUnlocked,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
             if (totalUnlocked > 0) {
+                // Unlocks all the requested CVX for the current epoch.
+                // The remaining tokens (if any) are left in the contract
+                // to be withdrawn by other users who requested unlock in the same epoch.
                 CLEVER_CVX_LOCKER.withdrawUnlocked();
             }
         }
 
-        address(CVX).safeTransfer(manager, cvxUnlocked);
+        address(CVX).safeTransfer(account, cvxUnlocked);
     }
 
     /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking

@@ -76,9 +76,9 @@ abstract contract BaseForkTest is Test {
         vm.stopPrank();
     }
 
-    //=======================================================================================//
-    //                              Forking utils functions
-    //=======================================================================================//
+    /////////////////////////////////////////////////////////////////
+    //                       UTILS FUNCTIONS                       //
+    /////////////////////////////////////////////////////////////////
 
     /// @notice Transfers CVX from CVX Treasury to the specified recipient
     function _transferCvx(address to, uint256 amount) internal {
@@ -127,10 +127,10 @@ abstract contract BaseForkTest is Test {
         vm.stopPrank();
     }
 
-    function _updateWeeklyWithdrawLimit(uint16 share) internal {
+    function _updateWeeklyWithdrawalLimit(uint16 share) internal {
         vm.startPrank(owner);
         afCvx.setWeeklyWithdrawShare(share);
-        afCvx.updateWeeklyWithdrawLimit();
+        afCvx.updateWeeklyWithdrawalLimit();
         vm.stopPrank();
     }
 
