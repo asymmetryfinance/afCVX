@@ -24,6 +24,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     address public immutable manager;
     address public operator;
+    bool public unlockInProgress;
 
     /// @notice The total amount of CVX unlock obligations.
     uint256 internal unlockObligations;
@@ -38,6 +39,13 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     modifier onlyOperator() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
+        }
+        _;
+    }
+
+    modifier unlockNotInProgress() {
+        if (unlockInProgress) {
+            revert UnlockInProgress();
         }
         _;
     }
@@ -67,11 +75,6 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         rewards = realisedFurnace;
     }
 
-    function totalLocked() external view returns (uint256) {
-        (uint256 deposited,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        return deposited;
-    }
-
     function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks) {
         UnlockRequest[] storage accountUnlocks = requestedUnlocks[account].unlocks;
         uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
@@ -88,7 +91,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @param cvxAmount amount of CVX tokens to deposit
     /// @param swap a flag indicating whether CVX should be swapped on Curve for clevCVX or deposited on Clever.
     /// @param minAmountOut minimum amount of clevCVX to receive after the swap. Only used if `swap` is true
-    function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external onlyManager {
+    function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external onlyManager unlockNotInProgress {
         address(CVX).safeTransferFrom(msg.sender, address(this), cvxAmount);
         if (swap) {
             uint256 clevCvxAmount = Zap.swapCvxToClevCvx(cvxAmount, minAmountOut);
@@ -117,7 +120,12 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @param amount The amount of CVX tokens to unlock
     /// @param account The address to receive CVX after the unlock period is over
     /// @return unlockEpoch The epoch number when all the requested CVX can be withdrawn
-    function requestUnlock(uint256 amount, address account) external onlyManager returns (uint256 unlockEpoch) {
+    function requestUnlock(uint256 amount, address account)
+        external
+        onlyManager
+        unlockNotInProgress
+        returns (uint256 unlockEpoch)
+    {
         unlockObligations += amount;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
 
@@ -145,7 +153,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     ///         The unlock must be requested prior by calling `requestUnlock` function
     /// @param account The address to receive unlocked CVX
     /// @return cvxUnlocked The amount of unlocked CVX sent to `account`
-    function withdrawUnlocked(address account) external onlyManager returns (uint256 cvxUnlocked) {
+    function withdrawUnlocked(address account) external onlyManager unlockNotInProgress returns (uint256 cvxUnlocked) {
         uint256 currentEpoch = block.timestamp / REWARDS_DURATION;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
         uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
@@ -185,6 +193,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking
     /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block.
     function repay() external onlyOperator {
+        unlockInProgress = true;
         uint256 amount = unlockObligations;
         if (amount != 0) {
             (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
@@ -206,6 +215,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
             unlockObligations = 0;
             CLEVER_CVX_LOCKER.unlock(amount);
         }
+        unlockInProgress = false;
     }
 
     /// @notice Pauses deposits and withdrawals.
