@@ -27,7 +27,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     bool public unlockInProgress;
 
     /// @notice The total amount of CVX unlock obligations.
-    uint256 internal unlockObligations;
+    uint256 public unlockObligations;
 
     mapping(address => UnlockInfo) public requestedUnlocks;
 
@@ -126,6 +126,9 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         unlockNotInProgress
         returns (uint256 unlockEpoch)
     {
+        // total unlock amount already requested
+        uint256 existingUnlockObligations = unlockObligations;
+
         unlockObligations += amount;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
 
@@ -136,11 +139,31 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
         uint256 locksLength = locks.length;
         for (uint256 i; i < locksLength; i++) {
+            // amount that can be unlocked at the unlock epoch
             uint256 locked = locks[i].pendingUnlock;
             uint64 epoch = locks[i].unlockEpoch;
+
+            if (existingUnlockObligations != 0) {
+                // subtract previous unlock requests from the available amount
+                if (existingUnlockObligations < locked) {
+                    unchecked {
+                        locked = locked - existingUnlockObligations;
+                    }
+                    existingUnlockObligations = 0;
+                } else {
+                    unchecked {
+                        existingUnlockObligations = existingUnlockObligations - locked;
+                    }
+                    // move to the next epoch as all available amount was already requested
+                    continue;
+                }
+            }
+
             if (amount > locked) {
                 unlocks.push(UnlockRequest({ unlockAmount: uint192(locked), unlockEpoch: epoch }));
-                amount -= locked;
+                unchecked {
+                    amount = amount - locked;
+                }
             } else {
                 unlocks.push(UnlockRequest({ unlockAmount: uint192(amount), unlockEpoch: epoch }));
                 unlockEpoch = epoch;
