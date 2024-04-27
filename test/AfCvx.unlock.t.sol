@@ -89,11 +89,9 @@ contract AfCvxUnlockForkTest is BaseForkTest {
     }
 
     function testFuzz_requestUnlock_concurrentRequests(uint256 assetsA, uint256 assetsB) public {
-        assetsA = bound(assetsA, 1e19, 1e22);
-        assetsB = bound(assetsB, 1e19, 1e22);
+        assetsA = bound(assetsA, 1e16, 1e22);
+        assetsB = bound(assetsB, 1e16, 1e22);
         vm.assume(assetsA < assetsB);
-        console.log(assetsA);
-        console.log(assetsB);
 
         address userA = _createAccountWithCvx("userA", assetsA);
         address userB = _createAccountWithCvx("userB", assetsB);
