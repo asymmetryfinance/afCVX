@@ -105,7 +105,6 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     function migrate(uint256[] calldata _unlockTimes, uint256[] calldata _amounts, address _receiver) external returns (uint256 _amount) {
         if (_receiver == address(0)) revert ZeroAddress();
         if (_receiver == address(this)) revert InvalidAddress();
-        if (_unlockTimes.length != _amounts.length) revert InvalidLength();
 
         UPX_CVX.safeBatchTransferFrom(msg.sender, address(this), _unlockTimes, _amounts, "");
         PIREX_CVX.redeem(_unlockTimes, _amounts, address(this));
@@ -121,9 +120,10 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @param _fors The addresses to redeem for
     /// @return _amount total amount of afCVX sent to users
     function multiRedeem(uint256[] calldata _unlockTimes, address[] calldata _fors) external returns (uint256 _amount) {
-        if (_unlockTimes.length != _fors.length) revert InvalidLength();
 
         uint256 _length = _unlockTimes.length;
+        if (_length != _fors.length) revert InvalidLength();
+
         for (uint256 i; i < _length; ++i) {
             _amount += redeem(_unlockTimes[i], _fors[i]);
         }
