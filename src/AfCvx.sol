@@ -72,7 +72,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CVX_REWARDS_POOL), token: address(CVX) }));
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(cleverCvxStrategy), token: address(CVX) }));
     }
-     
+
     /// @dev receives ETH when swapping cvxCRV to CVX via CVX-ETH pool
     receive() external payable {
         if (msg.sender != Zap.CRV_ETH_POOL) revert DirectEthTransfer();
@@ -163,7 +163,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxAssets)
     {
-        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit);
+        uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
+        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit).min(availableCvx);
     }
 
     /// @notice Simulates the effects of assets withdrawal.
@@ -213,7 +214,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxShares)
     {
-        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit));
+        uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
+        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit)).min(previewWithdraw(availableCvx));
     }
 
     /// @notice Simulates the effects of shares redemption.
