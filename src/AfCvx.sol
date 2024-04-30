@@ -435,7 +435,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     function harvest(uint256 minAmountOut) external onlyOperator returns (uint256 rewards) {
         uint256 convexStakedRewards = CVX_REWARDS_POOL.earned(address(this));
         if (convexStakedRewards != 0) {
-            CVX_REWARDS_POOL.getReward(false);
+            CVX_REWARDS_POOL.getReward(address(this), false, false);
             convexStakedRewards = Zap.swapCvxCrvToCvx(convexStakedRewards, minAmountOut);
         }
 

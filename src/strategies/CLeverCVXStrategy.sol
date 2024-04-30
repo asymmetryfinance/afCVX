@@ -205,8 +205,8 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
         for (; nextUnlockIndex < unlocksLength; nextUnlockIndex++) {
             uint256 unlockEpoch = unlocks[nextUnlockIndex].unlockEpoch;
-            uint256 unlockAmount = unlocks[nextUnlockIndex].unlockAmount;
             if (unlockEpoch <= currentEpoch) {
+                uint256 unlockAmount = unlocks[nextUnlockIndex].unlockAmount;
                 delete unlocks[nextUnlockIndex];
                 cvxUnlocked += unlockAmount;
             } else {
