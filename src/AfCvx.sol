@@ -103,6 +103,16 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         staked = CVX_REWARDS_POOL.balanceOf(address(this));
     }
 
+    function maxDeposit(address receiver)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256)
+    {
+        return paused ? 0 : super.maxDeposit(receiver);
+    }
+
     /// @notice Mints `shares` (afCVX) to `receiver` by depositing exactly `assets` of CVX tokens.
     /// @dev Can be called only if afCVX is not paused.
     ///      See {IERC4626-deposit}
@@ -117,6 +127,10 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         returns (uint256 shares)
     {
         return super.deposit(assets, receiver);
+    }
+
+    function maxMint(address receiver) public view virtual override(ERC4626Upgradeable, IERC4626) returns (uint256) {
+        return paused ? 0 : super.maxMint(receiver);
     }
 
     /// @notice Mints exactly `shares` (afCVX) to receiver by depositing `assets` (CVX).
@@ -163,6 +177,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxAssets)
     {
+        if (paused) return 0;
         uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
         return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit).min(availableCvx);
     }
@@ -214,6 +229,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxShares)
     {
+        if (paused) return 0;
         uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
         return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit)).min(previewWithdraw(availableCvx));
     }
@@ -298,6 +314,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @param owner The address of the owner for which the maximum unlock amount is calculated.
     /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
     function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
+        if (paused) return 0;
         return super.previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.maxTotalUnlock());
     }
 
