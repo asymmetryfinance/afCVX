@@ -40,7 +40,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     uint64 public withdrawalLimitNextUpdate;
     uint16 public weeklyWithdrawalShareBps;
 
-    modifier onlyOperator() {
+    modifier onlyOperatorOrOwner() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
         }
@@ -412,7 +412,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /////////////////////////////////////////////////////////////////
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
-    function distribute(bool swap, uint256 minAmountOut) external onlyOperator {
+    function distribute(bool swap, uint256 minAmountOut) external onlyOperatorOrOwner {
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = _previewDistribute();
 
         if (cleverDepositAmount == 0 && convexStakeAmount == 0) return;
@@ -432,7 +432,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     ///         calculates maximum withdraw amount for the current epoch.
     /// @dev Should be called at the beginning of each epoch.
     ///      Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards.
-    function harvest(uint256 minAmountOut) external onlyOperator returns (uint256 rewards) {
+    function harvest(uint256 minAmountOut) external onlyOperatorOrOwner returns (uint256 rewards) {
         uint256 convexStakedRewards = CVX_REWARDS_POOL.earned(address(this));
         if (convexStakedRewards != 0) {
             CVX_REWARDS_POOL.getReward(address(this), false, false);

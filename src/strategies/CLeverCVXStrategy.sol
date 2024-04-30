@@ -36,7 +36,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         _;
     }
 
-    modifier onlyOperator() {
+    modifier onlyOperatorOrOwner() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
         }
@@ -124,7 +124,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     /// @notice borrows maximum amount of clevCVX and deposits it to Furnace
     /// @dev must be called after `deposit` as Clever doesn't allow depositing and borrowing in the same block.
-    function borrow() external onlyOperator {
+    function borrow() external onlyOperatorOrOwner {
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
@@ -236,7 +236,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     /// @notice withdraws clevCVX from Furnace and repays the dept to allow unlocking
     /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block.
-    function repay() external onlyOperator {
+    function repay() external onlyOperatorOrOwner {
         unlockInProgress = true;
         uint256 amount = unlockObligations;
         if (amount != 0) {
@@ -276,7 +276,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     /// @notice unlocks CVX to fulfill the withdrawal requests
     /// @dev must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.
-    function unlock() external onlyOperator {
+    function unlock() external onlyOperatorOrOwner {
         uint256 amount = unlockObligations;
         if (amount != 0) {
             unlockObligations = 0;
