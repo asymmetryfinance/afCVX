@@ -57,7 +57,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         cleverCvxStrategy = ICleverCvxStrategy(strategy);
     }
 
-    function initialize(address _owner, address _operator, address _feeCollector) external payable initializer {
+    function initialize(address _owner, address _operator, address _feeCollector) external initializer {
         string memory name_ = "Asymmetry Finance afCVX";
         __ERC20_init(name_, "afCVX");
         __ERC4626_init(CVX);
@@ -72,7 +72,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CVX_REWARDS_POOL), token: address(CVX) }));
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(cleverCvxStrategy), token: address(CVX) }));
     }
-
+     
+    /// @dev receives ETH when swapping cvxCRV to CVX via CVX-ETH pool
     receive() external payable {
         if (msg.sender != Zap.CRV_ETH_POOL) revert DirectEthTransfer();
     }
