@@ -52,6 +52,21 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _;
     }
 
+    modifier validShare(uint16 newShareBps) {
+        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+        _;
+    }
+
+    modifier validFee(uint16 newFeeBps) {
+        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+        _;
+    }
+
+    modifier validAddress(address newAddress) {
+        if (newAddress == address(0)) revert InvalidAddress();
+        _;
+    }
+
     constructor(address strategy) {
         _disableInitializers();
         cleverCvxStrategy = ICleverCvxStrategy(strategy);
@@ -468,46 +483,45 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @notice Sets the share of value that CLever CVX strategy should hold.
     /// @notice Target ratio is maintained by directing deposits and rewards into either CLever CVX strategy or staked CVX
     /// @param newShareBps New share of CLever CVX strategy (staked CVX share is automatically 100% - clevStrategyShareBps)
-    function setCleverCvxStrategyShare(uint16 newShareBps) external onlyOwner {
-        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+    function setCleverCvxStrategyShare(uint16 newShareBps) external onlyOwner validShare(newShareBps) {
         cleverStrategyShareBps = newShareBps;
         emit CleverCvxStrategyShareSet(newShareBps);
     }
 
     /// @notice Sets the protocol fee which takes a percentage of the rewards
     /// @param newFeeBps New protocol fee
-    function setProtocolFee(uint16 newFeeBps) external onlyOwner {
-        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+    function setProtocolFee(uint16 newFeeBps) external onlyOwner validFee(newFeeBps) {
         protocolFeeBps = newFeeBps;
         emit ProtocolFeeSet(newFeeBps);
     }
 
     /// @notice Sets the withdrawal fee.
     /// @param newFeeBps New withdrawal fee.
-    function setWithdrawalFee(uint16 newFeeBps) external onlyOwner {
-        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+    function setWithdrawalFee(uint16 newFeeBps) external onlyOwner validFee(newFeeBps) {
         withdrawalFeeBps = newFeeBps;
         emit WithdrawalFeeSet(newFeeBps);
     }
 
     /// @notice Sets the share of the protocol TVL that can be withdrawn in a week
     /// @param newShareBps New weekly withdraw share.
-    function setWeeklyWithdrawShare(uint16 newShareBps) external onlyOwner {
-        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+    function setWeeklyWithdrawShare(uint16 newShareBps) external onlyOwner validShare(newShareBps) {
         weeklyWithdrawalShareBps = newShareBps;
         emit WeeklyWithdrawShareSet(newShareBps);
     }
 
     /// @notice Sets the recipient of the protocol fee.
     /// @param newProtocolFeeCollector New protocol fee collector.
-    function setProtocolFeeCollector(address newProtocolFeeCollector) external onlyOwner {
+    function setProtocolFeeCollector(address newProtocolFeeCollector)
+        external
+        onlyOwner
+        validAddress(newProtocolFeeCollector)
+    {
         if (newProtocolFeeCollector == address(0)) revert InvalidAddress();
         protocolFeeCollector = newProtocolFeeCollector;
         emit ProtocolFeeCollectorSet(newProtocolFeeCollector);
     }
 
-    function setOperator(address newOperator) external onlyOwner {
-        if (newOperator == address(0)) revert InvalidAddress();
+    function setOperator(address newOperator) external onlyOwner validAddress(newOperator) {
         operator = newOperator;
         emit OperatorSet(newOperator);
     }
