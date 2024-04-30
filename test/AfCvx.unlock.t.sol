@@ -7,24 +7,82 @@ import { ICleverCvxStrategy } from "src/interfaces/afCvx/ICleverCvxStrategy.sol"
 import { BaseForkTest } from "test/utils/BaseForkTest.sol";
 
 contract AfCvxUnlockForkTest is BaseForkTest {
+    function test_maxTotalUnlock() public {
+        uint256 assets = 100e18;
+        address userA = _createAccountWithCvx("userA", assets);
+        address userB = _createAccountWithCvx("userB", assets);
+
+        _deposit(userA, assets);
+        _deposit(userB, assets);
+        _distributeAndBorrow();
+
+        uint256 maxTotalUnlock = cleverCvxStrategy.maxTotalUnlock();
+        // total locked in clever is 160 CVX (80 from userA and 80 from userB)
+        // max unlock is less than total locked due to Clever repay fee
+        assertApproxEqAbs(maxTotalUnlock, 158e18, 0.5e18);
+
+        // userA requests to unlock 10 CVX
+        uint256 unlockAmount = 10e18;
+        vm.startPrank(userA);
+        afCvx.approve(address(afCvx), afCvx.previewWithdraw(unlockAmount));
+        afCvx.requestUnlock(unlockAmount, userA, userA);
+        vm.stopPrank();
+        assertEq(cleverCvxStrategy.unlockObligations(), unlockAmount);
+
+        // total unlock amount reduced by unlock obligations
+        maxTotalUnlock = cleverCvxStrategy.maxTotalUnlock();
+        assertApproxEqAbs(maxTotalUnlock, 148e18, 0.5e18);
+
+        // userA deposited 100 CVX and already requested 10 to unlock
+        uint256 userAMaxUnlock = afCvx.maxRequestUnlock(userA);
+        assertEq(userAMaxUnlock, 90e18);
+        // userB deposited 100 CVX
+        uint256 userBMaxUnlock = afCvx.maxRequestUnlock(userB);
+        assertEq(userBMaxUnlock, 100e18);
+        // userA requests to unlock remaining 90 CVX
+        vm.startPrank(userA);
+        afCvx.approve(address(afCvx), afCvx.previewWithdraw(userAMaxUnlock));
+        afCvx.requestUnlock(userAMaxUnlock, userA, userA);
+        vm.stopPrank();
+
+        // all CVX deposited by userA is requested to unlock
+        assertEq(cleverCvxStrategy.unlockObligations(), 100e18);
+        assertEq(afCvx.maxRequestUnlock(userA), 0);
+
+        maxTotalUnlock = cleverCvxStrategy.maxTotalUnlock();
+        assertApproxEqAbs(maxTotalUnlock, 58e18, 0.5e18);
+        // userB can only unlock ~ 58 CVX
+        assertEq(afCvx.maxRequestUnlock(userB), maxTotalUnlock);
+
+        // other users deposit 200 CVX
+        _deposit(200e18);
+        _distributeAndBorrow();
+
+        maxTotalUnlock = cleverCvxStrategy.maxTotalUnlock();
+        assertApproxEqAbs(maxTotalUnlock, 237e18, 0.5e18);
+        // userB can request to unlock full deposit
+        assertEq(afCvx.maxRequestUnlock(userB), 100e18);
+    }
+
     function test_previewUnlock() public {
         uint256 assets = 100e18;
         address user = _createAccountWithCvx(assets);
 
         _deposit(user, assets);
         assertEq(afCvx.balanceOf(user), 100e18);
-
         _distributeAndBorrow();
 
         uint256 maxUnlock = afCvx.maxRequestUnlock(user);
         uint256 preview = afCvx.previewRequestUnlock(maxUnlock);
+
         vm.startPrank(user);
         afCvx.approve(address(afCvx), afCvx.previewWithdraw(maxUnlock));
         (, uint256 actual) = afCvx.requestUnlock(maxUnlock, user, user);
         vm.stopPrank();
 
         assertEq(preview, actual);
-        assertEq(preview, 80e18);
+        // the unlock amount is less than deposited due to theClever repay fee
+        assertApproxEqAbs(preview, 79e18, 0.5e18);
     }
 
     function test_requestUnlock_concurrentRequests() public {
@@ -54,7 +112,6 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         uint256 firstUnlockEpoch = locks[0].unlockEpoch;
         uint256 secondUnlockEpoch = locks[1].unlockEpoch;
         assertEq(secondUnlockEpoch, firstUnlockEpoch + 2);
-
         uint256 firstUnlock = locks[0].pendingUnlock;
 
         // UserA requests a unlock equal to 100% of the first unlock.
@@ -72,11 +129,12 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         afCvx.approve(address(afCvx), afCvx.previewWithdraw(firstUnlock));
         (uint256 unlockEpochB,) = afCvx.requestUnlock(firstUnlock, userB, userB);
         vm.stopPrank();
+
         // userB can withdraw unlocked at the second epoch
         assertEq(unlockEpochB, secondUnlockEpoch);
+
         // unlock obligations updated
         assertEq(cleverCvxStrategy.unlockObligations(), firstUnlock * 2);
-
         ICleverCvxStrategy.UnlockRequest[] memory unlocksA = cleverCvxStrategy.getRequestedUnlocks(userA);
         assertEq(unlocksA.length, 1);
         assertEq(unlocksA[0].unlockEpoch, unlockEpochA);
@@ -88,10 +146,10 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         assertEq(unlocksB[0].unlockAmount, firstUnlock);
     }
 
-    function testFuzz_requestUnlock_concurrentRequests(uint256 assetsA, uint256 assetsB) public {
-        assetsA = bound(assetsA, 1e16, 1e22);
-        assetsB = bound(assetsB, 1e16, 1e22);
-        vm.assume(assetsA < assetsB);
+    function testFuzz_requestUnlock_concurrentRequests(uint256 assets) public {
+        assets = bound(assets, 1e17, 1e22);
+        uint256 assetsA = assets;
+        uint256 assetsB = assets * 2;
 
         address userA = _createAccountWithCvx("userA", assetsA);
         address userB = _createAccountWithCvx("userB", assetsB);
@@ -120,14 +178,14 @@ contract AfCvxUnlockForkTest is BaseForkTest {
 
         // UserA requests a unlock equal to 100% of the first unlock.
         vm.startPrank(userA);
-        afCvx.approve(address(afCvx), afCvx.previewWithdraw(firstUnlock));
+        afCvx.approve(address(afCvx), afCvx.previewRequestUnlock(firstUnlock));
         (uint256 unlockEpochA,) = afCvx.requestUnlock(firstUnlock, userA, userA);
         vm.stopPrank();
         assertEq(unlockEpochA, firstUnlockEpoch);
 
         // UserB also asks for a unlock equal to the first unlock.
         vm.startPrank(userB);
-        afCvx.approve(address(afCvx), afCvx.previewWithdraw(firstUnlock));
+        afCvx.approve(address(afCvx), afCvx.previewRequestUnlock(firstUnlock));
         (uint256 unlockEpochB,) = afCvx.requestUnlock(firstUnlock, userB, userB);
         vm.stopPrank();
         assertEq(unlockEpochB, secondUnlockEpoch);
@@ -135,9 +193,10 @@ contract AfCvxUnlockForkTest is BaseForkTest {
 
     function test_withdrawUnlocked() public {
         uint256 assets = 100e18;
-        address user = _createAccountWithCvx(assets);
+        address user = _createAccountWithCvx("user", assets);
 
         _deposit(user, assets);
+        _deposit(100e18);
         assertEq(afCvx.balanceOf(user), 100e18);
 
         _distributeAndBorrow();
@@ -146,32 +205,19 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         uint256 maxUnlock = afCvx.maxRequestUnlock(user);
 
         vm.startPrank(user);
-        afCvx.approve(address(afCvx), afCvx.previewWithdraw(maxUnlock));
+        afCvx.approve(address(afCvx), afCvx.previewRequestUnlock(maxUnlock));
         (uint256 unlockEpoch,) = afCvx.requestUnlock(maxUnlock, user, user);
         vm.stopPrank();
         uint256 currentEpoch = block.timestamp / 1 weeks;
 
         // withdraw  CVX in 17 weeks
         assertEq(unlockEpoch, currentEpoch + 17);
+        // CVX isn't transferred yet
         assertEq(CVX.balanceOf(user), 0);
         // afCVX is burnt
-        assertEq(afCvx.balanceOf(user), 20e18);
+        assertEq(afCvx.balanceOf(user), 0);
 
-        vm.prank(operator);
-        // repay fails because the repay amount is greater than the amount deposited in Furnace
-        // due to 1% repay fee that Clever takes
-        vm.expectRevert(ICleverCvxStrategy.InsufficientFurnaceBalance.selector);
-        cleverCvxStrategy.repay();
-
-        // deposit more
-        _deposit(10e18);
         vm.startPrank(operator);
-        afCvx.distribute(false, 0);
-        vm.roll(block.number + 1);
-        cleverCvxStrategy.borrow();
-        vm.roll(block.number + 1);
-
-        // repay and unlock succeeds
         cleverCvxStrategy.repay();
         vm.roll(block.number + 1);
         cleverCvxStrategy.unlock();
@@ -181,6 +227,6 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         vm.roll(block.number + 1);
 
         afCvx.withdrawUnlocked(user);
-        assertEq(CVX.balanceOf(user), 80e18);
+        assertEq(CVX.balanceOf(user), 100e18);
     }
 }

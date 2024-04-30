@@ -291,12 +291,11 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     }
 
     /// @notice Returns the maximum amount of assets (CVX) that can be unlocked by the `owner`.
-    /// @dev Considers the total CVX locked in Clever and the `owner`'s shares balance.
+    /// @dev Considers the total CVX amount that can be unlocked in Clever and the `owner`'s shares balance.
     /// @param owner The address of the owner for which the maximum unlock amount is calculated.
     /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
     function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
-        (uint256 totalLocked,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
-        return super.previewRedeem(balanceOf(owner)).min(totalLocked);
+        return super.previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.maxTotalUnlock());
     }
 
     /// @notice Simulates the effects of assets unlocking.

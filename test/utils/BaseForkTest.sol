@@ -106,6 +106,15 @@ abstract contract BaseForkTest is Test {
         vm.stopPrank();
     }
 
+    function _repayAndUnlock() internal {
+        vm.startPrank(operator);
+        cleverCvxStrategy.repay();
+        vm.roll(block.number + 1);
+        cleverCvxStrategy.unlock();
+        vm.roll(block.number + 1);
+        vm.stopPrank();
+    }
+
     function _distributeFurnaceRewards(uint256 rewards) internal {
         address furnaceOwner = Ownable(address(FURNACE)).owner();
         _transferCvx(furnaceOwner, rewards);

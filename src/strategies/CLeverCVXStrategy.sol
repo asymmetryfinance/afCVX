@@ -70,9 +70,30 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function totalValue() external view returns (uint256 deposited, uint256 rewards) {
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
+        deposited = depositedClever - borrowedClever + unrealisedFurnace;
 
-        deposited = depositedClever - borrowedClever + unrealisedFurnace - unlockObligations;
-        rewards = realisedFurnace;
+        if (unlockObligations > deposited) {
+            // This should not happen if repay()/unlock() is called at the end of every epoch
+            uint256 delta;
+            unchecked {
+                delta = unlockObligations - deposited;
+            }
+            if (delta > realisedFurnace) {
+                // Should not happen at all
+                rewards = 0;
+            } else {
+                // Decrease the reported rewards value to keep the overall total value accurate
+                unchecked {
+                    rewards = realisedFurnace - delta;
+                }
+            }
+            deposited = 0;
+        } else {
+            unchecked {
+                deposited = deposited - unlockObligations;
+            }
+            rewards = realisedFurnace;
+        }
     }
 
     function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks) {
@@ -225,8 +246,31 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
             if (clevCvxRequired > clevCvxAvailable) revert InsufficientFurnaceBalance();
 
-            FURNACE.withdraw(address(this), repayAmount + repayFee);
+            FURNACE.withdraw(address(this), clevCvxRequired);
             CLEVER_CVX_LOCKER.repay(0, repayAmount);
+        }
+    }
+
+    function maxTotalUnlock() external view returns (uint256 maxUnlock) {
+        // get available clevCVX from Furnace
+        (uint256 clevCvxAvailable,) = FURNACE.getUserInfo(address(this));
+
+        // subtract repay fee
+        uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
+        uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
+        uint256 repayAmount = clevCvxAvailable.mulDiv(CLEVER_FEE_PRECISION, CLEVER_FEE_PRECISION + repayRate);
+
+        (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        // decrease borrowed amount
+        totalBorrowed -= repayAmount;
+        maxUnlock = totalDeposited - totalBorrowed.mulDiv(CLEVER_FEE_PRECISION, reserveRate);
+
+        if (maxUnlock > unlockObligations) {
+            unchecked {
+                maxUnlock = maxUnlock - unlockObligations;
+            }
+        } else {
+            maxUnlock = 0;
         }
     }
 
@@ -266,7 +310,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function _calculateRepayAmount(uint256 _lockedCVX) private view returns (uint256 repayAmount, uint256 repayFee) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
-        repayAmount = _lockedCVX.mulDivUp(reserveRate, CLEVER_FEE_PRECISION);
-        repayFee = repayAmount.mulDivUp(repayRate, CLEVER_FEE_PRECISION);
+        repayAmount = _lockedCVX.mulDiv(reserveRate, CLEVER_FEE_PRECISION);
+        repayFee = repayAmount.mulDiv(repayRate, CLEVER_FEE_PRECISION);
     }
 }

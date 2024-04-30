@@ -77,18 +77,18 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // 2% of TVL can be withdrawn
         _updateWeeklyWithdrawalLimit(200);
 
-        _deposit(1_000_000 ether);
+        _deposit(1e23);
         _distributeAndBorrow();
         skip(16 weeks);
 
-        uint256 assetsIn = 10_000 ether;
+        uint256 assetsIn = 1e22;
         address attacker = _createAccountWithCvx("attacker", assetsIn);
         uint256 shares = _deposit(attacker, assetsIn);
 
         // simulate Furnace rewards
-        _distributeFurnaceRewards(50_000 ether);
+        _distributeFurnaceRewards(5e22);
         vm.prank(operator);
-        // harvested rewards transferred to afCvx increasing total assets
+        // harvested rewards transferred to afCvx increasing the total assets
         afCvx.harvest(0);
 
         vm.startPrank(attacker);
@@ -99,13 +99,7 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         assertEq(unlockEpoch, currentEpoch + 1, "unlock epoch isn't the next epoch");
 
         // unlock CVX locked in clever to fulfill the unlock request
-        vm.startPrank(operator);
-        cleverCvxStrategy.repay();
-
-        vm.roll(block.number + 1);
-        cleverCvxStrategy.unlock();
-        vm.roll(block.number + 1);
-        vm.stopPrank();
+        _repayAndUnlock();
 
         vm.warp(currentEpoch * 1 weeks + 1 weeks);
         vm.prank(0x11E91BB6d1334585AA37D8F4fde3932C7960B938);
@@ -114,7 +108,8 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // Attacker gets more than deposited since there is no withdrawal fee on unlock
         vm.prank(attacker);
         afCvx.withdrawUnlocked(attacker);
+        uint256 profit = CVX.balanceOf(attacker) - assetsIn;
 
-        assertGt(CVX.balanceOf(attacker), 1_0002 ether, "attacker received less than deposited");
+        assertApproxEqAbs(profit, 1.83e18, 0.01e18);
     }
 }
