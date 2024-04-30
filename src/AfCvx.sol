@@ -481,13 +481,13 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @notice Sets the recipient of the protocol fee.
     /// @param newProtocolFeeCollector New protocol fee collector.
     function setProtocolFeeCollector(address newProtocolFeeCollector) external onlyOwner {
-        if (newProtocolFeeCollector != address(0)) revert InvalidAddress();
+        if (newProtocolFeeCollector == address(0)) revert InvalidAddress();
         protocolFeeCollector = newProtocolFeeCollector;
         emit ProtocolFeeCollectorSet(newProtocolFeeCollector);
     }
 
     function setOperator(address newOperator) external onlyOwner {
-        if (newOperator != address(0)) revert InvalidAddress();
+        if (newOperator == address(0)) revert InvalidAddress();
         operator = newOperator;
         emit OperatorSet(newOperator);
     }

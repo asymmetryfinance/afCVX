@@ -293,7 +293,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     function setOperator(address newOperator) external onlyOwner {
-        if (newOperator != address(0)) revert InvalidAddress();
+        if (newOperator == address(0)) revert InvalidAddress();
         operator = newOperator;
         emit OperatorSet(newOperator);
     }
