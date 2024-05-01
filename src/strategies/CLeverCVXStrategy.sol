@@ -70,6 +70,12 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function totalValue() external view returns (uint256 deposited, uint256 rewards) {
         (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 unrealisedFurnace, uint256 realisedFurnace) = FURNACE.getUserInfo(address(this));
+
+        if (borrowedClever > 0) {
+            // Take into account Clever repay fee
+            uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
+            borrowedClever += borrowedClever.mulDiv(repayRate, CLEVER_FEE_PRECISION);
+        }
         deposited = depositedClever - borrowedClever + unrealisedFurnace;
 
         if (unlockObligations > deposited) {

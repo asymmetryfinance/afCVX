@@ -24,7 +24,7 @@ contract AfCvxHarvestForkTest is BaseForkTest {
 
         assertEq(rewards, 0);
         // weekly withdraw limit is updated when harvesting rewards
-        assertEq(afCvx.weeklyWithdrawalLimit(), 2 ether);
+        assertEq(afCvx.weeklyWithdrawalLimit(), 1.992e18);
         assertEq(afCvx.withdrawalLimitNextUpdate(), block.timestamp + 1 weeks);
 
         skip(1 weeks);
@@ -48,16 +48,16 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // 2% of TVL can be withdrawn
         _updateWeeklyWithdrawalLimit(200);
 
-        _deposit(500_000 ether);
+        _deposit(1e24);
         _distributeAndBorrow();
         skip(1 weeks);
 
-        uint256 assetsIn = 10_000 ether;
+        uint256 assetsIn = 1e22;
         address attacker = _createAccountWithCvx("attacker", assetsIn);
         uint256 shares = _deposit(attacker, assetsIn);
 
         // simulate Furnace rewards
-        _distributeFurnaceRewards(20_000 ether);
+        _distributeFurnaceRewards(5e22);
         vm.prank(operator);
         // harvested rewards transferred to afCvx increasing total assets
         afCvx.harvest(0);
@@ -77,16 +77,16 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // 2% of TVL can be withdrawn
         _updateWeeklyWithdrawalLimit(200);
 
-        _deposit(1e23);
+        _deposit(1e22);
         _distributeAndBorrow();
         skip(16 weeks);
 
-        uint256 assetsIn = 1e22;
+        uint256 assetsIn = 1e21;
         address attacker = _createAccountWithCvx("attacker", assetsIn);
         uint256 shares = _deposit(attacker, assetsIn);
 
         // simulate Furnace rewards
-        _distributeFurnaceRewards(5e22);
+        _distributeFurnaceRewards(5e21);
         vm.prank(operator);
         // harvested rewards transferred to afCvx increasing the total assets
         afCvx.harvest(0);
@@ -110,6 +110,6 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         afCvx.withdrawUnlocked(attacker);
         uint256 profit = CVX.balanceOf(attacker) - assetsIn;
 
-        assertApproxEqAbs(profit, 1.83e18, 0.01e18);
+        assertApproxEqAbs(profit, 0.183e18, 0.01e18);
     }
 }

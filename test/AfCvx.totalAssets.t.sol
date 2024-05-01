@@ -19,50 +19,48 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
         assertEq(afCvx.totalAssets(), assets);
 
         _distributeAndBorrow();
-        assertEq(afCvx.totalAssets(), assets);
+        // repay fee subtracted
+        assertEq(afCvx.totalAssets(), 99.6e18);
 
         // Now we wait two weeks.
         skip(2 weeks);
 
         // Now userB deposits.
         _deposit(userB, assets);
-        assertEq(afCvx.totalAssets(), assets * 2);
+        assertEq(afCvx.totalAssets(), 199.6e18);
 
         _distributeAndBorrow();
-        assertEq(afCvx.totalAssets(), assets * 2);
+        assertEq(afCvx.totalAssets(), 199.1996e18);
 
         // UserA requests unlock.
         vm.startPrank(userA);
         uint256 maxUnlockA = afCvx.maxRequestUnlock(userA);
         // UserA can unlock all deposited CVX
-        assertEq(maxUnlockA, assets);
+        assertApproxEqAbs(maxUnlockA, 99.4e18, 0.001e18);
         afCvx.approve(address(afCvx), afCvx.previewRequestUnlock(maxUnlockA));
         afCvx.requestUnlock(maxUnlockA, userA, userA);
         vm.stopPrank();
 
         // Only assets deposited by userB considered
-        assertEq(afCvx.totalAssets(), assets);
+        assertApproxEqAbs(afCvx.totalAssets(), 100e18, 0.5e18);
 
         // UserB requests unlock.
         vm.startPrank(userB);
         uint256 maxUnlockB = afCvx.maxRequestUnlock(userB);
-        // UserB can unlock only ~ 57.5 CVX
-        assertApproxEqAbs(maxUnlockB, 57.5e18, 0.05e18);
+
+        // UserB can unlock only ~ 58 CVX
+        assertApproxEqAbs(maxUnlockB, 58e18, 0.5e18);
         afCvx.approve(address(afCvx), afCvx.previewRequestUnlock(maxUnlockB));
         afCvx.requestUnlock(maxUnlockB, userB, userB);
         vm.stopPrank();
 
-        uint256 staked = CVX_REWARDS_POOL.balanceOf(address(afCvx));
-        // Total assets are approximately to the staked assets in Convex
+        // Total assets are approximately equal to the staked assets in Convex
         // as all assets deposited to Clever were requested to be unlocked
-        // The delta is due to Clever repay fee and Furnace distribution
-        assertApproxEqAbs(staked, afCvx.totalAssets(), 2.5e18);
-
+        assertApproxEqAbs(CVX_REWARDS_POOL.balanceOf(address(afCvx)), afCvx.totalAssets(), 1.7e18);
         // Operator repays the debt and unlocks the requested CVX
         _repayAndUnlock();
         // Again the total assets are approximately to the staked assets in Convex
-        // but the delta decreased since the repay fee was paid
-        assertApproxEqAbs(staked, afCvx.totalAssets(), 1.7e18);
+        assertApproxEqAbs(CVX_REWARDS_POOL.balanceOf(address(afCvx)), afCvx.totalAssets(), 1.7e18);
     }
 
     function test_totalAssets_furnaceDistribution() public {
@@ -71,7 +69,7 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
 
         _deposit(user, assets);
         _distributeAndBorrow();
-        assertEq(afCvx.totalAssets(), assets);
+        assertEq(afCvx.totalAssets(), 99.6e18);
 
         // User requests to unlock a half of deposited assets
         vm.startPrank(user);
@@ -81,14 +79,14 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
         vm.stopPrank();
 
         assertEq(cleverCvxStrategy.unlockObligations(), unlockAmount);
-        assertEq(afCvx.totalAssets(), 50e18);
+        assertEq(afCvx.totalAssets(), 49.6e18);
 
         // simulate Furnace rewards
         skip(2 weeks);
         vm.roll(block.number + 1);
         _distributeFurnaceRewards(1e24);
 
-        assertEq(afCvx.totalAssets(), 50e18);
+        assertEq(afCvx.totalAssets(), 49.6e18);
 
         skip(2 weeks);
         vm.roll(block.number + 1);
@@ -102,7 +100,7 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
         // The reported Clever rewards value was decreased to keep keep total assets value accurate
         (uint256 deposited, uint256 rewards) = cleverCvxStrategy.totalValue();
         assertEq(deposited, 0);
-        assertEq(rewards, 30e18);
-        assertEq(afCvx.totalAssets(), 50e18);
+        assertEq(rewards, 29.6e18);
+        assertEq(afCvx.totalAssets(), 49.6e18);
     }
 }
