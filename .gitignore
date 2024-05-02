@@ -27,6 +27,7 @@ out/
 
 # VSCode
 .history
+.vscode
 
 # Coverage
 lcov.info
