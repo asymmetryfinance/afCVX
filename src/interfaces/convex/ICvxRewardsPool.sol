@@ -10,5 +10,5 @@ interface ICvxRewardsPool {
     function stake(uint256 amount) external;
     function withdraw(uint256 amount, bool claim) external;
     function withdrawAll(bool claim) external;
-    function getReward(bool _stake) external;
+    function getReward(address account, bool claimExtras, bool stake) external;
 }
