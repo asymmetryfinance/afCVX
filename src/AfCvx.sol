@@ -40,7 +40,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     uint64 public withdrawalLimitNextUpdate;
     uint16 public weeklyWithdrawalShareBps;
 
-    modifier onlyOperator() {
+    modifier onlyOperatorOrOwner() {
         if (msg.sender != owner()) {
             if (msg.sender != operator) revert Unauthorized();
         }
@@ -52,12 +52,27 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _;
     }
 
+    modifier validShare(uint16 newShareBps) {
+        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+        _;
+    }
+
+    modifier validFee(uint16 newFeeBps) {
+        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+        _;
+    }
+
+    modifier validAddress(address newAddress) {
+        if (newAddress == address(0)) revert InvalidAddress();
+        _;
+    }
+
     constructor(address strategy) {
         _disableInitializers();
         cleverCvxStrategy = ICleverCvxStrategy(strategy);
     }
 
-    function initialize(address _owner, address _operator, address _feeCollector) external payable initializer {
+    function initialize(address _owner, address _operator, address _feeCollector) external initializer {
         string memory name_ = "Asymmetry Finance afCVX";
         __ERC20_init(name_, "afCVX");
         __ERC4626_init(CVX);
@@ -73,6 +88,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(cleverCvxStrategy), token: address(CVX) }));
     }
 
+    /// @dev receives ETH when swapping cvxCRV to CVX via CVX-ETH pool
     receive() external payable {
         if (msg.sender != Zap.CRV_ETH_POOL) revert DirectEthTransfer();
     }
@@ -102,6 +118,16 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         staked = CVX_REWARDS_POOL.balanceOf(address(this));
     }
 
+    function maxDeposit(address receiver)
+        public
+        view
+        virtual
+        override(ERC4626Upgradeable, IERC4626)
+        returns (uint256)
+    {
+        return paused ? 0 : super.maxDeposit(receiver);
+    }
+
     /// @notice Mints `shares` (afCVX) to `receiver` by depositing exactly `assets` of CVX tokens.
     /// @dev Can be called only if afCVX is not paused.
     ///      See {IERC4626-deposit}
@@ -116,6 +142,10 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         returns (uint256 shares)
     {
         return super.deposit(assets, receiver);
+    }
+
+    function maxMint(address receiver) public view virtual override(ERC4626Upgradeable, IERC4626) returns (uint256) {
+        return paused ? 0 : super.maxMint(receiver);
     }
 
     /// @notice Mints exactly `shares` (afCVX) to receiver by depositing `assets` (CVX).
@@ -162,7 +192,9 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxAssets)
     {
-        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit);
+        if (paused) return 0;
+        uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
+        return previewRedeem(balanceOf(owner)).min(weeklyWithdrawalLimit).min(availableCvx);
     }
 
     /// @notice Simulates the effects of assets withdrawal.
@@ -212,7 +244,9 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         override(ERC4626Upgradeable, IERC4626)
         returns (uint256 maxShares)
     {
-        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit));
+        if (paused) return 0;
+        uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
+        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit)).min(previewWithdraw(availableCvx));
     }
 
     /// @notice Simulates the effects of shares redemption.
@@ -291,12 +325,12 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     }
 
     /// @notice Returns the maximum amount of assets (CVX) that can be unlocked by the `owner`.
-    /// @dev Considers the total CVX locked in Clever and the `owner`'s shares balance.
+    /// @dev Considers the total CVX amount that can be unlocked in Clever and the `owner`'s shares balance.
     /// @param owner The address of the owner for which the maximum unlock amount is calculated.
     /// @return maxAssets The maximum amount of assets that can be unlocked by the `owner`.
     function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
-        (uint256 totalLocked,,,,) = CLEVER_CVX_LOCKER.getUserInfo(address(cleverCvxStrategy));
-        return super.previewRedeem(balanceOf(owner)).min(totalLocked);
+        if (paused) return 0;
+        return super.previewRedeem(balanceOf(owner)).min(cleverCvxStrategy.maxTotalUnlock());
     }
 
     /// @notice Simulates the effects of assets unlocking.
@@ -393,7 +427,7 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /////////////////////////////////////////////////////////////////
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
-    function distribute(bool swap, uint256 minAmountOut) external onlyOperator {
+    function distribute(bool swap, uint256 minAmountOut) external onlyOperatorOrOwner {
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = _previewDistribute();
 
         if (cleverDepositAmount == 0 && convexStakeAmount == 0) return;
@@ -413,10 +447,10 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     ///         calculates maximum withdraw amount for the current epoch.
     /// @dev Should be called at the beginning of each epoch.
     ///      Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards.
-    function harvest(uint256 minAmountOut) external onlyOperator returns (uint256 rewards) {
+    function harvest(uint256 minAmountOut) external onlyOperatorOrOwner returns (uint256 rewards) {
         uint256 convexStakedRewards = CVX_REWARDS_POOL.earned(address(this));
         if (convexStakedRewards != 0) {
-            CVX_REWARDS_POOL.getReward(false);
+            CVX_REWARDS_POOL.getReward(address(this), false, false);
             convexStakedRewards = Zap.swapCvxCrvToCvx(convexStakedRewards, minAmountOut);
         }
 
@@ -449,46 +483,45 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @notice Sets the share of value that CLever CVX strategy should hold.
     /// @notice Target ratio is maintained by directing deposits and rewards into either CLever CVX strategy or staked CVX
     /// @param newShareBps New share of CLever CVX strategy (staked CVX share is automatically 100% - clevStrategyShareBps)
-    function setCleverCvxStrategyShare(uint16 newShareBps) external onlyOwner {
-        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+    function setCleverCvxStrategyShare(uint16 newShareBps) external onlyOwner validShare(newShareBps) {
         cleverStrategyShareBps = newShareBps;
         emit CleverCvxStrategyShareSet(newShareBps);
     }
 
     /// @notice Sets the protocol fee which takes a percentage of the rewards
     /// @param newFeeBps New protocol fee
-    function setProtocolFee(uint16 newFeeBps) external onlyOwner {
-        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+    function setProtocolFee(uint16 newFeeBps) external onlyOwner validFee(newFeeBps) {
         protocolFeeBps = newFeeBps;
         emit ProtocolFeeSet(newFeeBps);
     }
 
     /// @notice Sets the withdrawal fee.
     /// @param newFeeBps New withdrawal fee.
-    function setWithdrawalFee(uint16 newFeeBps) external onlyOwner {
-        if (newFeeBps > BASIS_POINT_SCALE) revert InvalidFee();
+    function setWithdrawalFee(uint16 newFeeBps) external onlyOwner validFee(newFeeBps) {
         withdrawalFeeBps = newFeeBps;
         emit WithdrawalFeeSet(newFeeBps);
     }
 
     /// @notice Sets the share of the protocol TVL that can be withdrawn in a week
     /// @param newShareBps New weekly withdraw share.
-    function setWeeklyWithdrawShare(uint16 newShareBps) external onlyOwner {
-        if (newShareBps > BASIS_POINT_SCALE) revert InvalidShare();
+    function setWeeklyWithdrawShare(uint16 newShareBps) external onlyOwner validShare(newShareBps) {
         weeklyWithdrawalShareBps = newShareBps;
         emit WeeklyWithdrawShareSet(newShareBps);
     }
 
     /// @notice Sets the recipient of the protocol fee.
     /// @param newProtocolFeeCollector New protocol fee collector.
-    function setProtocolFeeCollector(address newProtocolFeeCollector) external onlyOwner {
-        if (newProtocolFeeCollector != address(0)) revert InvalidAddress();
+    function setProtocolFeeCollector(address newProtocolFeeCollector)
+        external
+        onlyOwner
+        validAddress(newProtocolFeeCollector)
+    {
+        if (newProtocolFeeCollector == address(0)) revert InvalidAddress();
         protocolFeeCollector = newProtocolFeeCollector;
         emit ProtocolFeeCollectorSet(newProtocolFeeCollector);
     }
 
-    function setOperator(address newOperator) external onlyOwner {
-        if (newOperator != address(0)) revert InvalidAddress();
+    function setOperator(address newOperator) external onlyOwner validAddress(newOperator) {
         operator = newOperator;
         emit OperatorSet(newOperator);
     }
