@@ -32,8 +32,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     IERC1155 public constant UPX_CVX = IERC1155(0x7A3D81CFC5A942aBE9ec656EFF818f7daB4E0Fe1);
 
     IERC4626 public constant UNION_CVX = IERC4626(0x8659Fc767cad6005de79AF65dAfE4249C57927AF);
-    // IERC4626 public constant ASYMMETRY_CVX = IERC4626(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B); // TODO - make constant
-    IERC4626 public immutable ASYMMETRY_CVX;
+    IERC4626 public constant ASYMMETRY_CVX = IERC4626(0x8668a15b7b023Dc77B372a740FCb8939E15257Cf);
 
     IPirexCVX public constant PIREX_CVX = IPirexCVX(0x35A398425d9f1029021A92bc3d2557D42C8588D7);
     IPirexLiquidityPool public constant PIREX_LP = IPirexLiquidityPool(0x389fB29230D02e67eB963C1F5A00f2b16f95BEb7);
@@ -43,9 +42,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     // Constructor
     // ============================================================================================
 
-    constructor(address _afCVX) {
-        ASYMMETRY_CVX = IERC4626(_afCVX); // TODO
-
+    constructor() {
         CVX.forceApprove(address(ASYMMETRY_CVX), type(uint256).max);
         PX_CVX.forceApprove(address(PIREX_LP), type(uint256).max);
         UPX_CVX.setApprovalForAll(address(PIREX_CVX), true);
