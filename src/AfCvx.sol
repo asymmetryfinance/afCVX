@@ -15,7 +15,7 @@ import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils
 import { TrackedAllowances, Allowance } from "./utils/TrackedAllowances.sol";
 import { IAfCvx } from "./interfaces/afCvx/IAfCvx.sol";
 import { ICleverCvxStrategy } from "./interfaces/afCvx/ICleverCvxStrategy.sol";
-import { CVX } from "./interfaces/convex/Constants.sol";
+import { CVX, CVXCRV } from "./interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "./interfaces/convex/ICvxRewardsPool.sol";
 import { CLEVER_CVX_LOCKER } from "./interfaces/clever/ICLeverCvxLocker.sol";
 import { Zap } from "./utils/Zap.sol";
@@ -448,9 +448,9 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     /// @dev Should be called at the beginning of each epoch.
     ///      Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards.
     function harvest(uint256 minAmountOut) external onlyOperatorOrOwner returns (uint256 rewards) {
-        uint256 convexStakedRewards = CVX_REWARDS_POOL.earned(address(this));
+        CVX_REWARDS_POOL.getReward(address(this), false, false);
+        uint256 convexStakedRewards = CVXCRV.balanceOf(address(this));
         if (convexStakedRewards != 0) {
-            CVX_REWARDS_POOL.getReward(address(this), false, false);
             convexStakedRewards = Zap.swapCvxCrvToCvx(convexStakedRewards, minAmountOut);
         }
 
