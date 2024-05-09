@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
+import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { CVX_REWARDS_POOL } from "src/interfaces/convex/ICvxRewardsPool.sol";
 import { CLEVER_CVX_LOCKER, EpochUnlockInfo } from "src/interfaces/clever/ICLeverCVXLocker.sol";
 import { FURNACE } from "src/interfaces/clever/IFurnace.sol";
 import { BaseForkTest } from "test/utils/BaseForkTest.sol";
 
 contract AfCvxDistributeForkTest is BaseForkTest {
+    using FixedPointMathLib for uint256;
+
     /// @dev no CVX were deposited after the last distribution
     function test_previewDistribute_nothingDeposited() public {
-        _mockCleverTotalValue(100e18, 0);
-        _mockStakedTotalValue(10e18, 0);
+        _mockCleverTotalValue(100e18, 0, 0);
+        _mockStakedTotalValue(10e18);
 
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
         assertEq(cleverDepositAmount, 0);
@@ -31,8 +34,8 @@ contract AfCvxDistributeForkTest is BaseForkTest {
     /// @dev Assert distribution is balanced, new deposit is distributed with 80/20 ratio
     function test_previewDistribute_ratioBalanced() public {
         uint256 amount = 50e18;
-        _mockCleverTotalValue(800e18, 0);
-        _mockStakedTotalValue(200e18, 0);
+        _mockCleverTotalValue(800e18, 0, 0);
+        _mockStakedTotalValue(200e18);
         _deposit(amount);
 
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
@@ -45,14 +48,66 @@ contract AfCvxDistributeForkTest is BaseForkTest {
     ///      New deposit is distribute to correct imbalance
     function test_previewDistribute_ratioImbalanced() public {
         uint256 amount = 10e18;
-        _mockCleverTotalValue(900e18, 0);
-        _mockStakedTotalValue(100e18, 0);
+        _mockCleverTotalValue(900e18, 0, 0);
+        _mockStakedTotalValue(100e18);
         _deposit(amount);
 
         (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 0);
         assertEq(convexStakeAmount, amount);
+    }
+
+    /// @dev Unlock obligations are greater than zero but less than total deposited in Clever
+    function test_previewDistribute_unlockObligationsLessThanDeposited() public {
+        uint256 amount = 10e18;
+        _mockCleverTotalValue(50e18, 0, 10e18);
+        _mockStakedTotalValue(10e18);
+        _deposit(amount);
+
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+
+        assertEq(cleverDepositAmount, 8e18);
+        assertEq(convexStakeAmount, 2e18);
+    }
+
+    /// @dev Unlock obligations are greater than total deposited in Clever
+    function test_previewDistribute_unlockObligationsGreaterThanDeposited() public {
+        _deposit(200e18);
+        _mockCleverTotalValue(40e18, 0, 70e18);
+        _mockStakedTotalValue(20e18);
+
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+
+        assertEq(cleverDepositAmount, 182e18);
+        assertEq(convexStakeAmount, 18e18);
+
+        _mockCleverTotalValue(400e18, 0, 700e18);
+        _mockStakedTotalValue(200e18);
+
+        (cleverDepositAmount, convexStakeAmount) = afCvx.previewDistribute();
+
+        assertEq(cleverDepositAmount, 200e18);
+        assertEq(convexStakeAmount, 0);
+    }
+
+    function testFuzz_previewDistribute(uint256 deposit, uint256 total) public {
+        deposit = bound(deposit, 1e20, 1e21);
+        total = bound(total, 1e22, 1e23);
+        uint16 cleverStrategyShareBps = afCvx.cleverStrategyShareBps();
+        uint256 lockedInClever = total.mulDiv(cleverStrategyShareBps, BASIS_POINT_SCALE);
+        uint256 staked = total - lockedInClever;
+
+        _deposit(deposit);
+        _mockCleverTotalValue(lockedInClever, 0, 0);
+        _mockStakedTotalValue(staked);
+
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        total += (cleverDepositAmount + convexStakeAmount);
+        lockedInClever += cleverDepositAmount;
+        uint256 cleverShareAfter = lockedInClever.mulDiv(BASIS_POINT_SCALE, total);
+
+        assertApproxEqAbs(cleverShareAfter, cleverStrategyShareBps, 1);
     }
 
     function test_distribute_depositToClever() public {

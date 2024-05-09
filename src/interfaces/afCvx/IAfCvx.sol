@@ -32,7 +32,10 @@ interface IAfCvx is IERC4626 {
     event UnlockedWithdrawn(address indexed sender, address indexed receiver, uint256 amount);
     event WeeklyWithdrawLimitUpdated(uint256 indexed withdrawLimit, uint256 nextUpdateDate);
 
-    function getAvailableAssets() external view returns (uint256 unlocked, uint256 lockedInClever, uint256 staked);
+    function getAvailableAssets()
+        external
+        view
+        returns (uint256 unlocked, uint256 lockedInClever, uint256 staked, uint256 unlockObligations);
     function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount);
     function previewRequestUnlock(uint256 assets) external view returns (uint256);
     function distribute(bool swap, uint256 minAmountOut) external;

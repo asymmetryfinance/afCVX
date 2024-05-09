@@ -31,7 +31,7 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         // simulate Furnace rewards
         _distributeFurnaceRewards(10 ether);
 
-        (, uint256 cleverRewards) = cleverCvxStrategy.totalValue();
+        (, uint256 cleverRewards,) = cleverCvxStrategy.totalValue();
         assertGt(cleverRewards, 0, "no clever rewards");
 
         vm.prank(owner);
