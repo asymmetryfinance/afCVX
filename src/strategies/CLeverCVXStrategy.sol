@@ -247,6 +247,8 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         uint256 amount = unlockObligations;
         if (amount != 0) {
             (uint256 repayAmount, uint256 repayFee) = _calculateRepayAmount(amount);
+            if (repayAmount == 0) return;
+
             (uint256 clevCvxAvailable,) = FURNACE.getUserInfo(address(this));
             uint256 clevCvxRequired = repayAmount + repayFee;
 
@@ -313,10 +315,27 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         return totalDeposited.mulDiv(reserveRate, CLEVER_FEE_PRECISION) - totalBorrowed;
     }
 
-    function _calculateRepayAmount(uint256 _lockedCVX) private view returns (uint256 repayAmount, uint256 repayFee) {
+    /// @notice Returns the minimum amount required to repay to fulfill requested `unlockAmount`.
+    /// @dev Ensures that Clever health condition `totalDeposited * reserveRate >= totalBorrowed` is satisfied.
+    function _calculateRepayAmount(uint256 unlockAmount) private view returns (uint256 repayAmount, uint256 repayFee) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
-        repayAmount = _lockedCVX.mulDivUp(reserveRate, CLEVER_FEE_PRECISION);
-        repayFee = repayAmount.mulDiv(repayRate, CLEVER_FEE_PRECISION);
+        (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+
+        if (totalDeposited < unlockAmount) return (0, 0);
+
+        // reduce total deposit by requested unlock amount
+        unchecked {
+            totalDeposited = totalDeposited - unlockAmount;
+        }
+
+        uint256 maxBorrowAfterUnlock = totalDeposited.mulDiv(reserveRate, CLEVER_FEE_PRECISION);
+
+        if (totalBorrowed > maxBorrowAfterUnlock) {
+            unchecked {
+                repayAmount = totalBorrowed - maxBorrowAfterUnlock;
+            }
+            repayFee = repayAmount.mulDiv(repayRate, CLEVER_FEE_PRECISION);
+        }
     }
 }
