@@ -316,7 +316,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function _calculateRepayAmount(uint256 _lockedCVX) private view returns (uint256 repayAmount, uint256 repayFee) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
-        repayAmount = _lockedCVX.mulDiv(reserveRate, CLEVER_FEE_PRECISION);
+        repayAmount = _lockedCVX.mulDivUp(reserveRate, CLEVER_FEE_PRECISION);
         repayFee = repayAmount.mulDiv(repayRate, CLEVER_FEE_PRECISION);
     }
 }
