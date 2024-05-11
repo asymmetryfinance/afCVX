@@ -11,6 +11,7 @@ import { ERC20PermitUpgradeable } from
 import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import { ERC4626Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { TrackedAllowances, Allowance } from "./utils/TrackedAllowances.sol";
 import { IAfCvx } from "./interfaces/afCvx/IAfCvx.sol";
@@ -245,8 +246,14 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         returns (uint256 maxShares)
     {
         if (paused) return 0;
-        uint256 availableCvx = CVX.balanceOf(address(this)) + CVX_REWARDS_POOL.balanceOf(address(this));
-        return balanceOf(owner).min(previewWithdraw(weeklyWithdrawalLimit)).min(previewWithdraw(availableCvx));
+
+        uint256 unlocked = CVX.balanceOf(address(this));
+        uint256 staked = CVX_REWARDS_POOL.balanceOf(address(this));
+        uint256 availableToWithdraw = (unlocked + staked).min(weeklyWithdrawalLimit);
+        uint256 fee = availableToWithdraw.mulDivUp(withdrawalFeeBps, BASIS_POINT_SCALE);
+        // Rounding down to prevent potential of overflow the weekly withdrawal limit.
+        uint256 redeemableShares = _convertToShares(availableToWithdraw + fee, Math.Rounding.Floor);
+        return balanceOf(owner).min(redeemableShares);
     }
 
     /// @notice Simulates the effects of shares redemption.
