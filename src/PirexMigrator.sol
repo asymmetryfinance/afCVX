@@ -131,7 +131,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
         if (_length != _fors.length) revert InvalidLength();
 
         for (uint256 i; i < _length; ++i) {
-            _amount += redeem(_unlockTimes[i], _fors[i]);
+            _amount += redeem(_unlockTimes[i], _fors[i], false);
         }
     }
 
@@ -139,8 +139,9 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @dev Anyone can redeem for anyone else
     /// @param _unlockTime CVX unlock timestamp
     /// @param _for The address to redeem for
+    /// @param _legacy True if upxCVX has been deprecated
     /// @return _amount Amount of afCVX sent to the `_receiver`
-    function redeem(uint256 _unlockTime, address _for) public returns (uint256 _amount) {
+    function redeem(uint256 _unlockTime, address _for, bool _legacy) public returns (uint256 _amount) {
 
         _amount = balances[_for][_unlockTime];
         balances[_for][_unlockTime] = 0;
@@ -150,7 +151,9 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
             _unlockTimes[0] = _unlockTime;
             uint256[] memory _amounts = new uint256[](1);
             _amounts[0] = _amount;
-            PIREX_CVX.redeem(_unlockTimes, _amounts, address(this));
+            !_legacy ?
+                PIREX_CVX.redeem(_unlockTimes, _amounts, address(this)) :
+                PIREX_CVX.redeemLegacy(_unlockTimes, _amounts, address(this));
         }
 
         _amount = CVX.balanceOf(address(this));

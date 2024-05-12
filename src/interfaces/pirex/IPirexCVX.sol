@@ -25,4 +25,12 @@ interface IPirexCVX {
         @param  receiver     address    Receives CVX
      */
     function redeem(uint256[] calldata unlockTimes, uint256[] calldata assets, address receiver) external;
+
+    /**
+        @notice Redeem CVX for deprecated upxCVX holders if enabled
+        @param  unlockTimes  uint256[]  CVX unlock timestamps
+        @param  assets       uint256[]  upxCVX amounts
+        @param  receiver     address    Receives CVX
+     */
+    function redeemLegacy(uint256[] calldata unlockTimes, uint256[] calldata assets, address receiver) external;
 }

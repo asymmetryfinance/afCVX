@@ -17,7 +17,7 @@ import "forge-std/console.sol";
 
 contract DeployPirexMigrator is Script {
 
-    address private _sweepReciever;
+    address private _sweepReciever = 0xa927c81CC214cc991613cB695751Bc932F042501;
 
     function run() public {
 
