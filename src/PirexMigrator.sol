@@ -52,7 +52,6 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
 
         CVX.forceApprove(address(ASYMMETRY_CVX), type(uint256).max);
         PX_CVX.forceApprove(address(PIREX_LP), type(uint256).max);
-        UPX_CVX.setApprovalForAll(address(PIREX_CVX), true);
     }
 
     // ============================================================================================
