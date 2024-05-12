@@ -3,11 +3,13 @@ pragma solidity 0.8.25;
 
 import {PirexMigrator, ICVXLocker, IPirexCVX} from "../src/PirexMigrator.sol";
 
-import {BaseForkTest} from "./utils/BaseForkTest.sol";
+import {Test} from "forge-std/Test.sol";
 
-contract PirexMigratorTests is BaseForkTest {
+contract PirexMigratorTests is Test {
 
     address payable public user;
+
+    uint256[] _emptyArray;
 
     PirexMigrator public migrator;
 
@@ -15,16 +17,16 @@ contract PirexMigratorTests is BaseForkTest {
     // Setup
     // ============================================================================================
 
-    function setUp() public override {
+    function setUp() public {
 
-        BaseForkTest.setUp();
+        vm.selectFork(vm.createFork(vm.envString("ETHEREUM_RPC_URL")));
 
         // Initialize user
         user = payable(makeAddr("user"));
         vm.deal({ account: user, newBalance: 100 ether });
 
         // Initialize migrator
-        migrator = new PirexMigrator(address(afCvx));
+        migrator = new PirexMigrator(user);
         vm.label({ account: address(migrator), newLabel: "PirexMigrator" });
     }
 
@@ -47,18 +49,18 @@ contract PirexMigratorTests is BaseForkTest {
         migrator.UNION_CVX().approve(address(migrator), _amount);
 
         vm.expectRevert();
-        migrator.migrate(_amount, 1, 0, user, false, true);
+        migrator.migrate(_emptyArray, _amount, 1, 0, user, false, true);
 
         vm.expectRevert(bytes4(keccak256("ZeroAmount()")));
-        migrator.migrate(0, 1, 0, user, true, true);
+        migrator.migrate(_emptyArray, 0, 1, 0, user, true, true);
 
         vm.expectRevert(bytes4(keccak256("ZeroAmount()")));
-        migrator.migrate(_amount, 0, 0, user, true, true);
+        migrator.migrate(_emptyArray, _amount, 0, 0, user, true, true);
 
         vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
-        migrator.migrate(_amount, 1, 0, address(0), true, true);
+        migrator.migrate(_emptyArray, _amount, 1, 0, address(0), true, true);
 
-        uint256 _afCVXReceived = migrator.migrate(_amount, 1, 0, user, true, true);
+        uint256 _afCVXReceived = migrator.migrate(_emptyArray, _amount, 1, 0, user, true, true);
 
         vm.stopPrank();
 
@@ -83,7 +85,7 @@ contract PirexMigratorTests is BaseForkTest {
 
         migrator.PX_CVX().approve(address(migrator), _amount);
 
-        uint256 _afCVXReceived = migrator.migrate(_amount, 1, 0, user, false, true);
+        uint256 _afCVXReceived = migrator.migrate(_emptyArray, _amount, 1, 0, user, false, true);
 
         vm.stopPrank();
 
@@ -110,7 +112,7 @@ contract PirexMigratorTests is BaseForkTest {
 
         migrator.PX_CVX().approve(address(migrator), _amount);
 
-        uint256 _upxCVXCredited = migrator.migrate(_amount, 0, _lockIndex, user, false, false);
+        uint256 _upxCVXCredited = migrator.migrate(_emptyArray, _amount, 0, _lockIndex, user, false, false);
 
         uint256 _upxCVXUserBalanceAfter = migrator.UPX_CVX().balanceOf(user, _unlockTime);
         uint256 _upxCVXMigratorBalanceAfter = migrator.UPX_CVX().balanceOf(address(migrator), _unlockTime);
