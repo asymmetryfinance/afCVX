@@ -9,6 +9,13 @@ interface IPirexCVX {
         Reward
     }
 
+    enum Fees {
+        Reward,
+        RedemptionMax,
+        RedemptionMin,
+        Developers
+    }
+
     /**
         @notice Initiate CVX redemptions
         @param  lockIndexes  uint256[]  Locked balance index
@@ -33,4 +40,10 @@ interface IPirexCVX {
         @param  receiver     address    Receives CVX
      */
     function redeemLegacy(uint256[] calldata unlockTimes, uint256[] calldata assets, address receiver) external;
+
+    function MAX_REDEMPTION_TIME() external view returns (uint256);
+
+    function FEE_DENOMINATOR() external view returns (uint256);
+
+    function fees(Fees) external view returns (uint256);
 }

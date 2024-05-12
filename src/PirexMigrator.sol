@@ -55,6 +55,29 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     }
 
     // ============================================================================================
+    // View functions
+    // ============================================================================================
+
+    /// @notice Get the fee amount for redeeming pxCVX for upxCVX
+    /// @param _amount Amount of pxCVX
+    /// @param _lockIndex Lock index
+    /// @return _feeAmount Fee amount
+    function getRedemptionFee(uint256 _amount, uint256 _lockIndex) external view returns (uint256 _feeAmount) {
+
+        uint256 _feeMax = PIREX_CVX.fees(IPirexCVX.Fees.RedemptionMax);
+        if (_feeMax != 0) {
+            (,,,ICVXLocker.LockedBalance[] memory _lockData) = CVX_LOCKER.lockedBalances(address(PIREX_CVX));
+            uint256 _unlockTime = _lockData[_lockIndex].unlockTime;
+            uint256 _waitTime = _unlockTime - block.timestamp;
+
+            uint256 _feeMin = PIREX_CVX.fees(IPirexCVX.Fees.RedemptionMin);
+            uint256 _feePercent = _feeMax - (((_feeMax - _feeMin) * _waitTime) / PIREX_CVX.MAX_REDEMPTION_TIME());
+
+            _feeAmount = (_amount * _feePercent) / PIREX_CVX.FEE_DENOMINATOR();
+        }
+    }
+
+    // ============================================================================================
     // External functions
     // ============================================================================================
 

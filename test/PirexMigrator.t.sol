@@ -3,7 +3,8 @@ pragma solidity 0.8.25;
 
 import {PirexMigrator, ICVXLocker, IPirexCVX} from "../src/PirexMigrator.sol";
 
-import {Test} from "forge-std/Test.sol";
+import "forge-std/Test.sol";
+import "forge-std/console.sol";
 
 contract PirexMigratorTests is Test {
 
@@ -183,6 +184,18 @@ contract PirexMigratorTests is Test {
         assertEq(migrator.ASYMMETRY_CVX().balanceOf(user), _amount, "testMigrateUnionCVXWithSwap: E4");
 
         vm.stopPrank();
+    }
+
+    function testGetRedemptionFee() public view {
+        uint256 _amount = 100 ether;
+        uint256 _lockIndexSoon = 0;
+        uint256 _lockIndexLate = 5;
+        uint256 _feeAmountSoon = migrator.getRedemptionFee(_amount, _lockIndexSoon);
+        uint256 _feeAmountLate = migrator.getRedemptionFee(_amount, _lockIndexLate);
+
+        assertTrue(_feeAmountSoon > 0, "testGetRedemptionFee: E0");
+        assertTrue(_feeAmountLate > 0, "testGetRedemptionFee: E1");
+        assertTrue(_feeAmountLate < _feeAmountSoon, "testGetRedemptionFee: E2");
     }
 
     // ============================================================================================
