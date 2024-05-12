@@ -269,9 +269,18 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         uint256 repayAmount = clevCvxAvailable.mulDiv(CLEVER_FEE_PRECISION, CLEVER_FEE_PRECISION + repayRate);
 
         (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        // decrease borrowed amount
-        totalBorrowed -= repayAmount;
-        maxUnlock = totalDeposited - totalBorrowed.mulDiv(CLEVER_FEE_PRECISION, reserveRate);
+
+        if (totalBorrowed > repayAmount) {
+            // Decrease borrowed amount
+            unchecked {
+                totalBorrowed = totalBorrowed - repayAmount;
+            }
+            maxUnlock = totalDeposited - totalBorrowed.mulDiv(CLEVER_FEE_PRECISION, reserveRate);
+        } else {
+            // Amount of clevCVX in Furnace can be greater than the borrowed amount only if
+            // CVX is swapped for clevCVX and deposited to Furnace, rather than locked in CleverLocker.
+            maxUnlock = totalDeposited;
+        }
 
         if (maxUnlock > unlockObligations) {
             unchecked {
