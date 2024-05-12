@@ -29,6 +29,11 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice The total amount of CVX unlock obligations.
     uint256 public unlockObligations;
 
+    /// @notice The end date of the maintenance window when unlock requests are not allowed.
+    ///         Maintenance window is a period between the last `unlock()` call and 
+    ///         the beginning of the next epoch.
+    uint256 public maintenanceWindowEnd;
+
     mapping(address => UnlockInfo) public requestedUnlocks;
 
     modifier onlyManager() {
@@ -153,6 +158,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         unlockNotInProgress
         returns (uint256 unlockEpoch)
     {
+        if (block.timestamp < maintenanceWindowEnd) revert MaintenanceWindow();
         // total unlock amount already requested
         uint256 existingUnlockObligations = unlockObligations;
 
@@ -193,10 +199,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
                 }
             } else {
                 unlocks.push(UnlockRequest({ unlockAmount: uint192(amount), unlockEpoch: epoch }));
-                unlockEpoch = epoch;
-                break;
+                return epoch;
             }
         }
+        revert InvalidState();
     }
 
     /// @notice Withdraws CVX that became unlocked by the current epoch.
@@ -291,13 +297,15 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         }
     }
 
-    /// @notice unlocks CVX to fulfill the withdrawal requests
-    /// @dev must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.
+    /// @notice Unlocks CVX to fulfill the withdrawal requests. Must be called before the end of the epoch.
+    /// @dev Must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.   
     function unlock() external onlyOperatorOrOwner {
         uint256 amount = unlockObligations;
         if (amount != 0) {
             unlockObligations = 0;
             CLEVER_CVX_LOCKER.unlock(amount);
+            // The start of the next epoch. Until then unlock requests are blocked.
+            maintenanceWindowEnd = block.timestamp / REWARDS_DURATION * REWARDS_DURATION + REWARDS_DURATION;
         }
         unlockInProgress = false;
     }

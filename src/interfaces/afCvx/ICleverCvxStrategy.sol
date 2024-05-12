@@ -16,6 +16,8 @@ interface ICleverCvxStrategy {
     error InvalidAddress();
     error InsufficientFurnaceBalance();
     error UnlockInProgress();
+    error InvalidState();
+    error MaintenanceWindow();
 
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();
