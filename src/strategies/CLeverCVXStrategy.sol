@@ -271,9 +271,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
             maxUnlock = totalDeposited;
         }
 
-        if (maxUnlock > unlockObligations) {
+        uint256 _unlockObligations = unlockObligations;
+        if (maxUnlock > _unlockObligations) {
             unchecked {
-                maxUnlock = maxUnlock - unlockObligations;
+                maxUnlock = maxUnlock - _unlockObligations;
             }
         } else {
             maxUnlock = 0;
