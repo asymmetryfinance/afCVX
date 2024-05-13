@@ -111,7 +111,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks) {
-        UnlockRequest[] memory accountUnlocks = requestedUnlocks[account].unlocks;
+        UnlockRequest[] storage accountUnlocks = requestedUnlocks[account].unlocks;
         uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
         uint256 unlocksLength = accountUnlocks.length;
         unlocks = new UnlockRequest[](unlocksLength - nextUnlockIndex);
