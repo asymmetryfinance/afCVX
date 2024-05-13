@@ -43,12 +43,10 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     modifier onlyOperatorOrOwner() {
-        if (msg.sender != owner()) {
-            if (msg.sender != operator) {
-                revert Unauthorized();
-            } else if (paused) {
-                revert Paused();
-            }
+        if (msg.sender != operator) {
+            if (msg.sender != owner()) revert Unauthorized();
+        } else if (paused) {
+            revert Paused();
         }
         _;
     }
