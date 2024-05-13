@@ -165,7 +165,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         // total unlock amount already requested
         uint256 existingUnlockObligations = unlockObligations;
 
-        unlockObligations += amount;
+        unlockObligations = existingUnlockObligations + amount;
         UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
 
         // retrieve an array of locked CVX and the epoch it can be unlocked starting from the next epoch
