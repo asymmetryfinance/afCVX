@@ -129,40 +129,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return paused ? 0 : super.maxDeposit(receiver);
     }
 
-    /// @notice Mints `shares` (afCVX) to `receiver` by depositing exactly `assets` of CVX tokens.
-    /// @dev Can be called only if afCVX is not paused.
-    ///      See {IERC4626-deposit}
-    /// @param assets The amount of assets (CVX) to deposit.
-    /// @param receiver The address to receive shares (afCVX).
-    /// @return shares The amount of shares minted.
-    function deposit(uint256 assets, address receiver)
-        public
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        whenNotPaused
-        returns (uint256 shares)
-    {
-        return super.deposit(assets, receiver);
-    }
-
     function maxMint(address receiver) public view virtual override(ERC4626Upgradeable, IERC4626) returns (uint256) {
         return paused ? 0 : super.maxMint(receiver);
-    }
-
-    /// @notice Mints exactly `shares` (afCVX) to receiver by depositing `assets` (CVX).
-    /// @dev Can be called only if afCVX is not paused.
-    ///      See {IERC4626-mint}
-    /// @param shares The amount of shares (afCVX) to mint.
-    /// @param receiver The address to receive shares (afCVX).
-    /// @return assets The amount of assets deposited.
-    function mint(uint256 shares, address receiver)
-        public
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        whenNotPaused
-        returns (uint256 assets)
-    {
-        return super.mint(shares, receiver);
     }
 
     /// @dev Copied from ERC4626Upgradeable to avoid unnecessary SLOAD of $._asset since _asset is a constant
@@ -214,25 +182,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return super.previewWithdraw(assets + fee);
     }
 
-    /// @notice Withdraws CVX assets, burning the `owner`'s (afCVX) shares.
-    ///         The caller of this function does not have to be the `owner`
-    ///         if the `owner` has approved the caller to spend their afCVX.
-    /// @dev Can be called only if afCVX is not paused.
-    ///      See {IERC4626-withdraw}
-    /// @param assets The amount of assets (CVX) to withdraw.
-    /// @param receiver The address to receive the assets (CVX).
-    /// @param owner The address of the owner for which the shares (afCVX) are burned.
-    /// @return shares The amount of shares (afCVX) burned.
-    function withdraw(uint256 assets, address receiver, address owner)
-        public
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        whenNotPaused
-        returns (uint256)
-    {
-        return super.withdraw(assets, receiver, owner);
-    }
-
     /// @notice Returns the maximum amount of shares (afCVX) that can be redeemed by the `owner`.
     /// @dev Considers the remaining weekly withdrawal limit converted to shares, and the `owner`'s shares balance.
     ///      See {IERC4626-maxRedeem}
@@ -271,25 +220,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         uint256 assets = super.previewRedeem(shares);
         uint256 feeBps = withdrawalFeeBps;
         return assets - assets.mulDivUp(feeBps, feeBps + BASIS_POINT_SCALE);
-    }
-
-    /// @notice Redeems (afCVX) `shares` to receive (CVX) assets, burning the `owner`'s (afCVX) `shares`.
-    ///         The caller of this function does not have to be the `owner`
-    ///         if the `owner` has approved the caller to spend their afCVX.
-    /// @dev Can be called only if afCVX is not paused.
-    ///      See {IERC4626-redeem}
-    /// @param shares The amount of shares (afCVX) to redeem.
-    /// @param receiver The address to receive the assets (CVX).
-    /// @param owner The address of the owner for which the shares (afCVX) are burned.
-    /// @return assets The amount of assets (CVX) withdrawn.
-    function redeem(uint256 shares, address receiver, address owner)
-        public
-        virtual
-        override(ERC4626Upgradeable, IERC4626)
-        whenNotPaused
-        returns (uint256)
-    {
-        return super.redeem(shares, receiver, owner);
     }
 
     function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
