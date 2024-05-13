@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
+import { CVX, CVXCRV } from "src/interfaces/convex/Constants.sol";
 
 // solhint-disable func-name-mixedcase, var-name-mixedcase
 interface ICurveFactoryPlainPool {
@@ -17,12 +19,10 @@ interface ICurveCryptoPool {
 // solhint-enable func-name-mixedcase, var-name-mixedcase
 
 library Zap {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
 
-    address internal constant CVXCRV = 0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7;
-    address internal constant CRV = 0xD533a949740bb3306d119CC777fa900bA034cd52;
-    address internal constant CVX = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B;
+    IERC20 internal constant CRV = IERC20(address(0xD533a949740bb3306d119CC777fa900bA034cd52));
 
     address internal constant CVXCRV_CRV_POOL = 0x971add32Ea87f10bD192671630be3BE8A11b8623;
     address internal constant CRV_ETH_POOL = 0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14;
@@ -30,17 +30,17 @@ library Zap {
     address internal constant CVX_CLEVCVX_POOL = 0xF9078Fb962A7D13F55d40d49C8AA6472aBD1A5a6;
 
     function swapCvxToClevCvx(uint256 cvxAmount, uint256 minAmountOut) external returns (uint256) {
-        CVX.safeApprove(CVX_CLEVCVX_POOL, cvxAmount);
+        CVX.forceApprove(CVX_CLEVCVX_POOL, cvxAmount);
         return ICurveFactoryPlainPool(CVX_CLEVCVX_POOL).exchange(0, 1, cvxAmount, minAmountOut);
     }
 
     function swapCvxCrvToCvx(uint256 cvxCrvAmount, uint256 minAmountOut) external returns (uint256) {
         // cvxCRV -> CRV
-        CVXCRV.safeApprove(CVXCRV_CRV_POOL, cvxCrvAmount);
+        CVXCRV.forceApprove(CVXCRV_CRV_POOL, cvxCrvAmount);
         uint256 crvAmount = ICurveFactoryPlainPool(CVXCRV_CRV_POOL).exchange(1, 0, cvxCrvAmount, 0);
 
         // CRV -> ETH
-        CRV.safeApprove(CRV_ETH_POOL, crvAmount);
+        CRV.forceApprove(CRV_ETH_POOL, crvAmount);
         uint256 ethAmount = ICurveCryptoPool(CRV_ETH_POOL).exchange_underlying(2, 1, crvAmount, 0);
 
         // ETH -> CVX
