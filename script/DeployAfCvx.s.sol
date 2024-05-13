@@ -46,21 +46,21 @@ contract DeployAfCvx is Script {
         address _cleverCvxStrategyImplementation = address(new CleverCvxStrategy(afCvxProxyAddr));
         address _afCvxImplementation = address(new AfCvx(cleverCvxStrategyProxyAddr));
 
-        // Deploy CleverCvxStrategy proxy
-        address _cleverCvxStrategy = _factory.deployDeterministic(
-            _cleverCvxStrategySalt,
-            address(_cleverCvxStrategyImplementation),
-            abi.encodeCall(CleverCvxStrategy.initialize, (_OWNER, _OPERATOR))
-        );
-        require(_cleverCvxStrategy == cleverCvxStrategyProxyAddr, "predicted wrong cleverCvxStrategy proxy address");
+        // // Deploy CleverCvxStrategy proxy
+        // address _cleverCvxStrategy = _factory.deployDeterministic(
+        //     _cleverCvxStrategySalt,
+        //     address(_cleverCvxStrategyImplementation),
+        //     abi.encodeCall(CleverCvxStrategy.initialize, (_OWNER, _OPERATOR))
+        // );
+        // require(_cleverCvxStrategy == cleverCvxStrategyProxyAddr, "predicted wrong cleverCvxStrategy proxy address");
 
-        // Deploy AfCvx proxy
-        address _afCvx = _factory.deployDeterministic(
-            _afCvxSalt,
-            _afCvxImplementation,
-            abi.encodeCall(AfCvx.initialize, (_OWNER, _OPERATOR, _FEE_COLLECTOR))
-        );
-        require(_afCvx == afCvxProxyAddr, "predicted wrong afCvx proxy address");
+        // // Deploy AfCvx proxy
+        // address _afCvx = _factory.deployDeterministic(
+        //     _afCvxSalt,
+        //     _afCvxImplementation,
+        //     abi.encodeCall(AfCvx.initialize, (_OWNER, _OPERATOR, _FEE_COLLECTOR))
+        // );
+        // require(_afCvx == afCvxProxyAddr, "predicted wrong afCvx proxy address");
 
         vm.stopBroadcast();
 
@@ -69,10 +69,10 @@ contract DeployAfCvx is Script {
         console.log("Implementation Addresses:");
         console.log("CleverCvxStrategyImplementation: ", _cleverCvxStrategyImplementation);
         console.log("AfCvxImplementation: ", _afCvxImplementation);
-        console.log("=====================================");
-        console.log("Proxy Addresses:");
-        console.log("CleverCvxStrategyProxy: ", _cleverCvxStrategy);
-        console.log("AfCvxProxy: ", _afCvx);
+        // console.log("=====================================");
+        // console.log("Proxy Addresses:");
+        // console.log("CleverCvxStrategyProxy: ", _cleverCvxStrategy);
+        // console.log("AfCvxProxy: ", _afCvx);
         console.log("=====================================");
         console.log("=====================================");
 
@@ -80,9 +80,13 @@ contract DeployAfCvx is Script {
 }
 
 // =====================================
-// Implementation Addresses:
+// Implementation Addresses V1:
 // CleverCvxStrategyImplementation:  0xE55E68166E45FC24f769d6039CC020d77802D8d9
 // AfCvxImplementation:  0xCca90892f22554FAdC0cB652fE4cc26040335319
+// =====================================
+// Implementation Addresses V2:
+// CleverCvxStrategyImplementation:  0xA71021CA12f4A6c0389b7ca6f0a2a2E2FC86426E
+// AfCvxImplementation:  0x47D1226489A28Ae7dEe404d7A8Db03d3B21694f8
 // =====================================
 // Proxy Addresses:
 // CleverCvxStrategyProxy:  0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a
