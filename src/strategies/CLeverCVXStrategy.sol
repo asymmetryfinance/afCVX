@@ -25,17 +25,17 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     address public immutable manager;
     address public operator;
     bool public unlockInProgress;
-    bool public paused;
 
     /// @notice The total amount of CVX unlock obligations.
     uint256 public unlockObligations;
+
+    mapping(address => UnlockInfo) public requestedUnlocks;
+    bool public paused;
 
     /// @notice The end date of the maintenance window when unlock requests are not allowed.
     ///         Maintenance window is a period between the last `unlock()` call and
     ///         the beginning of the next epoch.
     uint256 public maintenanceWindowEnd;
-
-    mapping(address => UnlockInfo) public requestedUnlocks;
 
     modifier onlyManager() {
         if (msg.sender != manager) revert Unauthorized();
