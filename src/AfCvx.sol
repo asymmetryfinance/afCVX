@@ -455,7 +455,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         onlyOwner
         validAddress(newProtocolFeeCollector)
     {
-        if (newProtocolFeeCollector == address(0)) revert InvalidAddress();
         protocolFeeCollector = newProtocolFeeCollector;
         emit ProtocolFeeCollectorSet(newProtocolFeeCollector);
     }
