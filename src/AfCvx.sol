@@ -43,7 +43,11 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
     modifier onlyOperatorOrOwner() {
         if (msg.sender != owner()) {
-            if (msg.sender != operator) revert Unauthorized();
+            if (msg.sender != operator) {
+                revert Unauthorized();
+            } else if (paused) {
+                revert Paused();
+            }
         }
         _;
     }

@@ -18,6 +18,7 @@ interface ICleverCvxStrategy {
     error UnlockInProgress();
     error InvalidState();
     error MaintenanceWindow();
+    error Paused();
 
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();

@@ -25,12 +25,13 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     address public immutable manager;
     address public operator;
     bool public unlockInProgress;
+    bool public paused;
 
     /// @notice The total amount of CVX unlock obligations.
     uint256 public unlockObligations;
 
     /// @notice The end date of the maintenance window when unlock requests are not allowed.
-    ///         Maintenance window is a period between the last `unlock()` call and 
+    ///         Maintenance window is a period between the last `unlock()` call and
     ///         the beginning of the next epoch.
     uint256 public maintenanceWindowEnd;
 
@@ -43,7 +44,11 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     modifier onlyOperatorOrOwner() {
         if (msg.sender != owner()) {
-            if (msg.sender != operator) revert Unauthorized();
+            if (msg.sender != operator) {
+                revert Unauthorized();
+            } else if (paused) {
+                revert Paused();
+            }
         }
         _;
     }
@@ -298,7 +303,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     /// @notice Unlocks CVX to fulfill the withdrawal requests. Must be called before the end of the epoch.
-    /// @dev Must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.   
+    /// @dev Must be called after `repay` as Clever doesn't allow repaying and unlocking in the same block.
     function unlock() external onlyOperatorOrOwner {
         uint256 amount = unlockObligations;
         if (amount != 0) {
@@ -313,6 +318,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     /// @notice Pauses deposits and withdrawals.
     /// @dev Called in emergencies to stop all calls and transfers until further notice.
     function emergencyShutdown() external onlyManager {
+        paused = true;
         _emergencyRevokeAllAllowances();
         emit EmergencyShutdown();
     }
