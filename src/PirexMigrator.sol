@@ -23,6 +23,8 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
 
     mapping(address receiver => mapping(uint256 unlockTime => uint256 amount)) public balances;
 
+    address public immutable sweepReceiver;
+
     uint256 public constant FROM_INDEX = 1; // lpxCVX
     uint256 public constant TO_INDEX = 0; // CVX
 
@@ -30,6 +32,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     IERC20 public constant PX_CVX = IERC20(_PX_CVX);
 
     IERC1155 public constant UPX_CVX = IERC1155(0x7A3D81CFC5A942aBE9ec656EFF818f7daB4E0Fe1);
+    IERC1155 public constant RPX_CVX = IERC1155(0xC044613B702Ed11567A38108703Ac5478a3F7DB8);
 
     IERC4626 public constant UNION_CVX = IERC4626(0x8659Fc767cad6005de79AF65dAfE4249C57927AF);
     IERC4626 public constant ASYMMETRY_CVX = IERC4626(0x8668a15b7b023Dc77B372a740FCb8939E15257Cf);
@@ -42,10 +45,36 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     // Constructor
     // ============================================================================================
 
-    constructor() {
+    constructor(address _sweepReceiver) {
+        if (_sweepReceiver == address(0)) revert ZeroAddress();
+
+        sweepReceiver = _sweepReceiver;
+
         CVX.forceApprove(address(ASYMMETRY_CVX), type(uint256).max);
         PX_CVX.forceApprove(address(PIREX_LP), type(uint256).max);
-        UPX_CVX.setApprovalForAll(address(PIREX_CVX), true);
+    }
+
+    // ============================================================================================
+    // View functions
+    // ============================================================================================
+
+    /// @notice Get the fee amount for redeeming pxCVX for upxCVX
+    /// @param _amount Amount of pxCVX
+    /// @param _lockIndex Lock index
+    /// @return _feeAmount Fee amount
+    function getRedemptionFee(uint256 _amount, uint256 _lockIndex) external view returns (uint256 _feeAmount) {
+
+        uint256 _feeMax = PIREX_CVX.fees(IPirexCVX.Fees.RedemptionMax);
+        if (_feeMax != 0) {
+            (,,,ICVXLocker.LockedBalance[] memory _lockData) = CVX_LOCKER.lockedBalances(address(PIREX_CVX));
+            uint256 _unlockTime = _lockData[_lockIndex].unlockTime;
+            uint256 _waitTime = _unlockTime - block.timestamp;
+
+            uint256 _feeMin = PIREX_CVX.fees(IPirexCVX.Fees.RedemptionMin);
+            uint256 _feePercent = _feeMax - (((_feeMax - _feeMin) * _waitTime) / PIREX_CVX.MAX_REDEMPTION_TIME());
+
+            _feeAmount = (_amount * _feePercent) / PIREX_CVX.FEE_DENOMINATOR();
+        }
     }
 
     // ============================================================================================
@@ -57,6 +86,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @dev Migration using a swap will result in the `_receiver` receiving afCVX tokens immidiately.
     ///      Migration not using a swap will result in the `_receiver`'s internal account being credited with upxCVX tokens.
     ///      Internally credited upxCVX can be redeemed for CVX and deposited into afCVX once the unlock time has passed using the `redeem` function.
+    /// @param _rpxCvxIDs Array of RPX_CVX token IDs. NOTICE: If the caller fails to provide the correct IDs, he will lose the tokens.
     /// @param _amount Amount of uCVX/pxCVX
     /// @param _minSwapReceived Minimum amount of CVX to receive from the swap. Only used if `_isSwap` is true
     /// @param _lockIndex Lock index
@@ -65,6 +95,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @param _isSwap True if the user wants to swap uCVX/pxCVX for CVX, false if the user wants to redeem uCVX/pxCVX for upxCVX
     /// @return Amount of afCVX sent or upxCVX credited to the `_receiver`
     function migrate(
+        uint256[] calldata _rpxCvxIDs,
         uint256 _amount,
         uint256 _minSwapReceived,
         uint256 _lockIndex,
@@ -86,7 +117,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
             PIREX_LP.swap(IPirexLiquidityPool.Token._PX_CVX, _amount, _minSwapReceived, FROM_INDEX, TO_INDEX);
             _amount = ASYMMETRY_CVX.deposit(CVX.balanceOf(address(this)), _receiver);
         } else {
-            _amount = _initiateRedemption(_amount, _lockIndex, _receiver);
+            _amount = _initiateRedemption(_rpxCvxIDs, _amount, _lockIndex, _receiver);
         }
 
         emit Migrated(_amount, _receiver, _isSwap);
@@ -122,7 +153,7 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
         if (_length != _fors.length) revert InvalidLength();
 
         for (uint256 i; i < _length; ++i) {
-            _amount += redeem(_unlockTimes[i], _fors[i]);
+            _amount += redeem(_unlockTimes[i], _fors[i], false);
         }
     }
 
@@ -130,8 +161,9 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
     /// @dev Anyone can redeem for anyone else
     /// @param _unlockTime CVX unlock timestamp
     /// @param _for The address to redeem for
+    /// @param _legacy True if upxCVX has been deprecated
     /// @return _amount Amount of afCVX sent to the `_receiver`
-    function redeem(uint256 _unlockTime, address _for) public returns (uint256 _amount) {
+    function redeem(uint256 _unlockTime, address _for, bool _legacy) public returns (uint256 _amount) {
 
         _amount = balances[_for][_unlockTime];
         balances[_for][_unlockTime] = 0;
@@ -141,7 +173,9 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
             _unlockTimes[0] = _unlockTime;
             uint256[] memory _amounts = new uint256[](1);
             _amounts[0] = _amount;
-            PIREX_CVX.redeem(_unlockTimes, _amounts, address(this));
+            !_legacy ?
+                PIREX_CVX.redeem(_unlockTimes, _amounts, address(this)) :
+                PIREX_CVX.redeemLegacy(_unlockTimes, _amounts, address(this));
         }
 
         _amount = CVX.balanceOf(address(this));
@@ -150,15 +184,32 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
         emit Redeemed(_amount, _unlockTime, _for, msg.sender);
     }
 
+    /// @notice Sweep RPX_CVX tokens to the `sweepReceiver`
+    /// @param _rpxCvxIDs Array of RPX_CVX token IDs
+    function sweep(uint256[] calldata _rpxCvxIDs) external {
+        uint256 _length = _rpxCvxIDs.length;
+        if (_length > 0) {
+            for (uint256 i; i < _length; ++i) {
+                uint256 _balance = RPX_CVX.balanceOf(address(this), _rpxCvxIDs[i]);
+                RPX_CVX.safeTransferFrom(address(this), sweepReceiver, _rpxCvxIDs[i], _balance, "");
+            }
+        }
+    }
+
     // ============================================================================================
     // Internal functions
     // ============================================================================================
 
     /// @dev Whoever calling should be nonReentrant because CEI pattern is violated
-    function _initiateRedemption(uint256 _amount, uint256 _lockIndex, address _receiver) internal returns (uint256) {
+    function _initiateRedemption(
+        uint256[] calldata _rpxCvxIDs,
+        uint256 _amount,
+        uint256 _lockIndex,
+        address _receiver
+    ) internal returns (uint256) {
         (,,,ICVXLocker.LockedBalance[] memory _lockData) = CVX_LOCKER.lockedBalances(address(PIREX_CVX));
         uint256 _unlockTime = _lockData[_lockIndex].unlockTime;
-        uint256 _balanceBefore = UPX_CVX.balanceOf(address(this), _unlockTime);
+        uint256 _balance = UPX_CVX.balanceOf(address(this), _unlockTime);
 
         {
             uint256[] memory _assets = new uint256[](1);
@@ -168,10 +219,24 @@ contract PirexMigrator is ERC1155Holder, ReentrancyGuard {
             PIREX_CVX.initiateRedemptions(_lockIndexes, IPirexCVX.Futures.Reward, _assets, address(this));
         }
 
-        _amount = UPX_CVX.balanceOf(address(this), _unlockTime) - _balanceBefore;
+        _amount = UPX_CVX.balanceOf(address(this), _unlockTime) - _balance;
         balances[_receiver][_unlockTime] += _amount;
 
         emit InitiatedRedemption(_amount, _unlockTime, _receiver);
+
+        uint256 _length = _rpxCvxIDs.length;
+        if (_length > 0) {
+            for (uint256 i; i < _length; ++i) {
+                _balance = RPX_CVX.balanceOf(address(this), _rpxCvxIDs[i]);
+                RPX_CVX.safeTransferFrom(
+                    address(this),
+                    _receiver,
+                    _rpxCvxIDs[i],
+                    _balance,
+                    ""
+                );
+            }
+        }
 
         return _amount;
     }

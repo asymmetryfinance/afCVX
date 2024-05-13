@@ -17,12 +17,14 @@ import "forge-std/console.sol";
 
 contract DeployPirexMigrator is Script {
 
+    address private _sweepReceiver = 0xa927c81CC214cc991613cB695751Bc932F042501;
+
     function run() public {
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
 
         // Deploy PirexMigrator
-        address _migrator = address(new PirexMigrator());
+        address _migrator = address(new PirexMigrator(_sweepReceiver));
 
         vm.stopBroadcast();
 
