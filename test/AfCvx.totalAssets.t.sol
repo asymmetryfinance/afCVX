@@ -98,9 +98,19 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
         assertEq(realised, 40e18);
 
         // The reported Clever rewards value was decreased to keep keep total assets value accurate
-        (uint256 deposited, uint256 rewards) = cleverCvxStrategy.totalValue();
-        assertEq(deposited, 0);
-        assertEq(rewards, 29.6e18);
+        (uint256 deposited, uint256 rewards, uint256 unlockObligations) = cleverCvxStrategy.totalValue();
+        assertEq(deposited, 39.6e18);
+        assertEq(rewards, 40e18);
+        assertEq(unlockObligations, 50e18);
         assertEq(afCvx.totalAssets(), 49.6e18);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+
+        (deposited, rewards, unlockObligations) = cleverCvxStrategy.totalValue();
+        assertEq(deposited, 39.6e18);
+        assertEq(rewards, 0);
+        assertEq(unlockObligations, 50e18);
+        assertApproxEqAbs(afCvx.totalAssets(), 49.6e18, 0.03e18);
     }
 }

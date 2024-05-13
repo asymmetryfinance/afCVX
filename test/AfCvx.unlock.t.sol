@@ -62,7 +62,7 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         // userB can request to unlock full deposit
         assertApproxEqAbs(afCvx.maxRequestUnlock(userB), 99.3e18, 0.5e18);
     }
-    
+
     function test_previewUnlock() public {
         uint256 assets = 100e18;
         address user = _createAccountWithCvx(assets);
@@ -81,6 +81,46 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         assertEq(preview, actual);
         // the unlock amount is less than deposited due to theClever repay fee
         assertApproxEqAbs(preview, 79.5e18, 0.5e18);
+    }
+
+    function test_requestUnlock_maintenanceWindow() public {
+        uint256 assets = 100e18;
+        address user = _createAccountWithCvx(assets);
+
+        _deposit(user, assets);
+        _distributeAndBorrow();
+
+        // user requests unlock
+        uint256 unlockAmount = 5e18;
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), unlockAmount);
+        afCvx.requestUnlock(unlockAmount, user, user);
+        vm.stopPrank();
+
+        ICleverCvxStrategy.UnlockRequest[] memory unlocks = cleverCvxStrategy.getRequestedUnlocks(user);
+        assertEq(unlocks.length, 1);
+        assertEq(unlocks[0].unlockAmount, unlockAmount);
+
+        // operator repays the debt and calls unlock
+        _repayAndUnlock();
+
+        // user cannot request another unlock until the next epoch
+        vm.startPrank(user);
+        afCvx.approve(address(afCvx), unlockAmount);
+        vm.expectRevert(ICleverCvxStrategy.MaintenanceWindow.selector);
+        afCvx.requestUnlock(unlockAmount, user, user);
+        vm.stopPrank();
+
+        skip(cleverCvxStrategy.maintenanceWindowEnd() - block.timestamp);
+
+        // user requests unlock at the beginning of a new epoch
+        vm.prank(user);
+        afCvx.requestUnlock(unlockAmount, user, user);
+
+        unlocks = cleverCvxStrategy.getRequestedUnlocks(user);
+        assertEq(unlocks.length, 2);
+        assertEq(unlocks[0].unlockAmount, unlockAmount);
+        assertEq(unlocks[1].unlockAmount, unlockAmount);
     }
 
     function test_requestUnlock_concurrentRequests() public {
@@ -215,11 +255,7 @@ contract AfCvxUnlockForkTest is BaseForkTest {
         // afCVX is burnt
         assertEq(afCvx.balanceOf(user), 0);
 
-        vm.startPrank(operator);
-        cleverCvxStrategy.repay();
-        vm.roll(block.number + 1);
-        cleverCvxStrategy.unlock();
-        vm.stopPrank();
+        _repayAndUnlock();
 
         skip(17 weeks);
         vm.roll(block.number + 1);

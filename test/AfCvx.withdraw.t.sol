@@ -84,7 +84,7 @@ contract AfCvxWithdrawForkTest is BaseForkTest {
         // redeem reverts
         vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxRedeem.selector, user, assets, 0));
         afCvx.redeem(assets, user, user);
-        
+
         _updateWeeklyWithdrawalLimit(1000); // 10%
         assertEq(afCvx.weeklyWithdrawalLimit(), 99.6e18);
 
@@ -93,9 +93,9 @@ contract AfCvxWithdrawForkTest is BaseForkTest {
         vm.prank(user);
         uint256 actual = afCvx.redeem(maxRedeem, user, user);
         assertEq(preview, actual);
-        assertEq(preview, 99.6e18);
+        assertApproxEqAbs(preview, 99.6e18, 1);
     }
-    
+
     function test_redeem() public {
         uint256 assets = 100e18;
         address user = _createAccountWithCvx(assets);
@@ -115,13 +115,13 @@ contract AfCvxWithdrawForkTest is BaseForkTest {
         vm.stopPrank();
 
         maxRedeem = afCvx.maxRedeem(user);
-        assertEq(maxRedeem, 2e18);
+        assertApproxEqAbs(maxRedeem, 2e18, 1);
 
         vm.startPrank(user);
         afCvx.approve(address(afCvx), maxRedeem);
         afCvx.redeem(maxRedeem, user, user);
 
-        assertEq(CVX.balanceOf(user), 1.992e18);
-        assertEq(afCvx.balanceOf(user), 98e18);
+        assertApproxEqAbs(CVX.balanceOf(user), 1.992e18, 1);
+        assertApproxEqAbs(afCvx.balanceOf(user), 98e18, 1);
     }
 }

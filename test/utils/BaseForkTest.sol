@@ -150,11 +150,11 @@ abstract contract BaseForkTest is Test {
         vm.stopPrank();
     }
 
-    function _mockCleverTotalValue(uint256 deposited, uint256 rewards) internal {
+    function _mockCleverTotalValue(uint256 deposited, uint256 rewards, uint256 unlockObligations) internal {
         vm.mockCall(
             address(cleverCvxStrategy),
             abi.encodeWithSelector(cleverCvxStrategy.totalValue.selector),
-            abi.encode(deposited, rewards)
+            abi.encode(deposited, rewards, unlockObligations)
         );
     }
 
