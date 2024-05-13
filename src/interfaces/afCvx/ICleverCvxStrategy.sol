@@ -23,7 +23,7 @@ interface ICleverCvxStrategy {
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();
 
-    function totalValue() external view returns (uint256 deposited, uint256 rewards);
+    function totalValue() external view returns (uint256 deposited, uint256 rewards, uint256 obligations);
     function maxTotalUnlock() external view returns (uint256 maxUnlock);
     function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external;
     function borrow() external;
