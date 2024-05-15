@@ -2,16 +2,16 @@
 
 This document outlines how the protocol should be interacted with and maintained. It is divided into three main sections based on the following roles:
 
-- **_admin_** is the highest privileged role responsible for setting the protocol parameters;
+- **_owner_** is the highest privileged role responsible for setting the protocol parameters and emergency shutdown;
 - **_operator_** is a privileged role responsible for protocol management tasks, such as harvesting rewards and depositing into strategies;
 - **_user_** defines any permissionless actions accessible by anyone.
 
-## Admin
+## Owner
 
 > [!CAUTION]
 > In case of an on-going exploit or other emergency invoke the `AfCvx::emergencyShutdown()` method,
-> this will pause all deposit/withdrawal functions as well as disable the `CLeverCvxStrategy`. Note that
-> this method may consume quite a bit of gas.
+> this will pause all deposit/withdrawal functions as well as disable the `CLeverCvxStrategy`.
+> When the contracts are paused only the owner can perform the protocol management tasks.
 
 ### Configuring Roles
 
@@ -65,6 +65,10 @@ function setProtocolFeeCollector(address newProtocolFeeCollector) external
 
 The default ratio for assets distribution between CLever CVX Strategy and staked CVX in Convex is 80/20. To change the percentage of CLever CVX Strategy, as the owner call `AfCvx::setCLeverCvxStrategyShare` with the value representing new share in basis points. For example, to set the share to `75%` pass `7500` to the function. Note, that the share of staked CVX is calculated automatically.
 
+```solidity
+function setCLeverCvxStrategyShare(uint16 newShareBps) external
+```
+
 ### Configuring Weekly Withdrawal Share
 
 To set the percentage of total value locked that can be withdrawn in one week, as the owner call `AfCvx::setWeeklyWithdrawShare` passing the new share in basis points. For example, to set the share to `2%` pass `200` to the function.
@@ -80,21 +84,19 @@ function setWeeklyWithdrawShare(uint16 newShareBps) external
 
 ### Depositing CVX into Strategies
 
-To distribute the deposited CVX between CLever CVX Strategy and Convex staking contract, as the operator (or owner) call `AfCvx::distribute` function
+To distribute the deposited CVX between CLever CVX Strategy and Convex staking contract, as the operator (or owner) call `AfCvx::distribute` function with the following parameters:
+
+- `swap` - a boolean flag indicating whether CVX should be swapped on Curve for clevCVX or deposited in CLever Locker.
+- `minAmountOut` - a minimum amount of clevCVX to receive after the swap. Only used if `swap` parameter is `true`.
 
 ```solidity
 function distribute(bool swap, uint256 minAmountOut) external
 ```
 
-with the following parameters:
-
-- `swap` - a boolean flag indicating whether CVX should be swapped on Curve for clevCVX or deposited in CLever Locker.
-- `minAmountOut` - a minimum amount of clevCVX to receive after the swap. Only used if `swap` parameter is `true`.
-
 To preview the amounts of CVX that will be deposited to each strategy anyone can call `AfCvx::previewDistribute` view function.
 
 ```solidity
-function previewDistribute() external view returns (uint256 CLeverDepositAmount, uint256 convexStakeAmount)
+function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount)
 ```
 
 The frequency of `AfCvx::distribute` calls depends on deposits volume.
@@ -107,18 +109,19 @@ If `AfCvx::distribute` function was invoked with `swap` parameter set to `false`
 function borrow() external
 ```
 
-> [!NOTE] > `CLeverCvxStrategy::borrow` is implemented as a stand-alone function because `CLeverCvxLocker` contract doesn't allow depositing and borrowing in the same block.
+> [!NOTE] 
+> `CLeverCvxStrategy::borrow` is implemented as a stand-alone function because `CLeverCvxLocker` contract doesn't allow depositing and borrowing in the same block.
 
 ### Harvesting Rewards
+
+> [!IMPORTANT]
+> The harvest function must be called at the beginning of the epoch after Convex, CLever and Furnace rewards distribution.
 
 To harvest rewards from the underling strategies as the operator call `AfCvx::harvest` function passing the minimum amount of CVX to receive when swapping cvxCRV to CVX:
 
 ```solidity
 function harvest(uint256 minAmountOut) external returns (uint256 rewards)
 ```
-
-> [!IMPORTANT]
-> The harvest function must be called at the beginning of the epoch after Convex, CLever and Furnace rewards distribution.
 
 To get the amount of cvxCRV earned by the protocol call `earned` function in Convex [CVXRewardsPool](https://etherscan.io/address/0xCF50b810E57Ac33B91dCF525C6ddd9881B139332#readContract) contract passing afCVX contract address
 
@@ -144,7 +147,17 @@ function unlock() external;
 ```
 
 > [!IMPORTANT]
-> The functions must be called as close to the end of the epoch as possible as users won't be able to requests unlocks between the last `CLeverCvxStrategy::unlock` and the beginning of a new epoch.
+> The functions must be called as close to the end of the epoch as possible because users won't be able to request unlocks between the last `CLeverCvxStrategy::unlock` call and the beginning of a new epoch.
 
-> [!NOTE] 
+> [!NOTE]
 > `CLeverCvxStrategy::repay` and `CLeverCvxStrategy::unlock` are implemented as two separate functions because `CLeverCvxLocker` contract doesn't allow repaying and unlocking in the same block.
+
+## User
+
+### Depositing
+
+### Withdrawing
+
+### Requesting Unlock
+
+### Withdrawing Unlocked
