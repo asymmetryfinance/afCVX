@@ -11,7 +11,7 @@ import { TrackedAllowances, Allowance } from "../utils/TrackedAllowances.sol";
 import { Zap } from "../utils/Zap.sol";
 import { CLEVER_CVX_LOCKER, EpochUnlockInfo } from "../interfaces/clever/ICLeverCvxLocker.sol";
 import { FURNACE } from "../interfaces/clever/IFurnace.sol";
-import { CVX } from "../interfaces/convex/Constants.sol";
+import { CVX, CVXCRV } from "../interfaces/convex/Constants.sol";
 import { CLEVCVX } from "../interfaces/clever/Constants.sol";
 
 contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UUPSUpgradeable {
@@ -76,7 +76,9 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     }
 
     function totalValue() external view returns (uint256 deposited, uint256 rewards, uint256 obligations) {
-        (uint256 depositedClever,,, uint256 borrowedClever,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        // NOTE: `borrowedClever` doesn't include Clever rewards as they will be harvested and deposited to
+        // Furnace overtime to reduce spikes in afCVX price.
+        (uint256 depositedClever, uint256 borrowedClever,) = _getCleverState(false);
         uint256 unrealisedFurnace;
         (unrealisedFurnace, rewards) = FURNACE.getUserInfo(address(this));
 
@@ -122,12 +124,21 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
-    /// @notice claims all realised CVX from Furnace
-    /// @return rewards amount of realised CVX
-    function claim() external onlyManager returns (uint256 rewards) {
-        (, rewards) = FURNACE.getUserInfo(address(this));
-        if (rewards > 0) {
-            FURNACE.claim(manager);
+    /// @notice Claims all realised CVX from Furnace and Clever clevCVX rewards
+    /// @return furnaceRewards The amount of realised CVX claimed from Furnace
+    /// @return cleverRewards The amount of clevCVX rewards claimed from CLever
+    function claim() external onlyManager returns (uint256 furnaceRewards, uint256 cleverRewards) {
+        (, furnaceRewards) = FURNACE.getUserInfo(address(this));
+        address _manager = manager;
+        if (furnaceRewards > 0) {
+            FURNACE.claim(_manager);
+        }
+
+        (,, cleverRewards) = _getCleverState(true);
+        if (cleverRewards > 0) {
+            // claim rewards
+            CLEVER_CVX_LOCKER.borrow(cleverRewards, false);
+            address(CVXCRV).safeTransfer(_manager, cleverRewards);
         }
     }
 
@@ -257,7 +268,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
         uint256 repayAmount = clevCvxAvailable.mulDiv(CLEVER_FEE_PRECISION, CLEVER_FEE_PRECISION + repayRate);
 
-        (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        (uint256 totalDeposited, uint256 totalBorrowed,) = _getCleverState(false);
 
         if (totalBorrowed > repayAmount) {
             // Decrease borrowed amount
@@ -313,7 +324,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
 
     function _calculateMaxBorrowAmount() private view returns (uint256) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
-        (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        (uint256 totalDeposited, uint256 totalBorrowed,) = _getCleverState(false);
         return totalDeposited.mulDiv(reserveRate, CLEVER_FEE_PRECISION) - totalBorrowed;
     }
 
@@ -322,7 +333,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
     function _calculateRepayAmount(uint256 unlockAmount) private view returns (uint256 repayAmount, uint256 repayFee) {
         uint256 reserveRate = CLEVER_CVX_LOCKER.reserveRate();
         uint256 repayRate = CLEVER_CVX_LOCKER.repayFeePercentage();
-        (uint256 totalDeposited,,, uint256 totalBorrowed,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+        (uint256 totalDeposited, uint256 totalBorrowed,) = _getCleverState(false);
 
         if (totalDeposited < unlockAmount) return (0, 0);
 
@@ -339,5 +350,24 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
             }
             repayFee = repayAmount.mulDiv(repayRate, CLEVER_FEE_PRECISION);
         }
+    }
+
+    /// @notice Returns the amounts of deposited CVX, borrowed clevCVX and earned clevCVX rewards
+    ///         by the strategy in CLeverCVXLocker.
+    /// @dev Unlike CLeverCVXLocker `getUserInfo` function doesn't use rewards to reduce the debt.
+    function _getCleverState(bool includeRewards)
+        private
+        view
+        returns (uint256 totalDeposited, uint256 totalBorrowed, uint256 totalRewards)
+    {
+        (uint128 totalDebt, uint128 rewards, uint192 rewardPerSharePaid,, uint112 totalLocked) =
+            CLEVER_CVX_LOCKER.userInfo(address(this));
+
+        totalDeposited = totalLocked;
+        totalBorrowed = totalDebt;
+
+        totalRewards = includeRewards
+            ? rewards + (CLEVER_CVX_LOCKER.accRewardPerShare() - rewardPerSharePaid).mulWad(totalLocked)
+            : 0;
     }
 }

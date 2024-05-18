@@ -423,14 +423,14 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
             convexStakedRewards = Zap.swapCvxCrvToCvx(convexStakedRewards, minAmountOut);
         }
 
-        uint256 cleverRewards = cleverCvxStrategy.claim();
-        rewards = convexStakedRewards + cleverRewards;
+        (uint256 furnaceRewards,) = cleverCvxStrategy.claim();
+        rewards = convexStakedRewards + furnaceRewards;
 
         if (rewards != 0) {
             uint256 fee = _mulBps(rewards, protocolFeeBps);
             rewards -= fee;
             address(CVX).safeTransfer(protocolFeeCollector, fee);
-            emit Harvested(cleverRewards, convexStakedRewards);
+            emit Harvested(furnaceRewards, convexStakedRewards);
         }
 
         _updateWeeklyWithdrawalLimit();

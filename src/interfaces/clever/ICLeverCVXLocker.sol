@@ -14,6 +14,18 @@ struct EpochUnlockInfo {
 interface ICleverCvxLocker {
     function repayFeePercentage() external view returns (uint256);
     function reserveRate() external view returns (uint256);
+    function accRewardPerShare() external view returns (uint256);
+
+    function userInfo(address account)
+        external
+        view
+        returns (
+            uint128 totalDebt,
+            uint128 rewards,
+            uint192 rewardPerSharePaid,
+            uint64 lastInteractedBlock,
+            uint112 totalLocked
+        );
 
     function getUserInfo(address account)
         external
@@ -32,16 +44,10 @@ interface ICleverCvxLocker {
         returns (EpochUnlockInfo[] memory locks, EpochUnlockInfo[] memory pendingUnlocks);
 
     function deposit(uint256 amount) external;
-
     function unlock(uint256 amount) external;
-
     function withdrawUnlocked() external;
-
     function repay(uint256 cvxAmount, uint256 clevCvxAmount) external;
-
     function borrow(uint256 amount, bool depositToFurnace) external;
-
-    function harvest(address recipient, uint256 minimumOut) external returns (uint256);
-
+    function donate(uint256 amount) external;
     function processUnlockableCVX() external;
 }
