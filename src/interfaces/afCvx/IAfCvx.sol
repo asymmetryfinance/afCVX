@@ -19,7 +19,11 @@ interface IAfCvx is IERC4626 {
     event WeeklyWithdrawShareSet(uint256 indexed newShare);
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();
-    event Distributed(uint256 indexed cleverDepositAmount, uint256 indexed convexStakeAmount);
+    event Distributed(
+        uint256 indexed cleverDepositAmount,
+        uint256 indexed convexStakeAmount,
+        uint256 indexed furnaceDirectDepositAmount
+    );
     event Harvested(uint256 indexed furnaceRewards, uint256 indexed cleverRewards, uint256 indexed convexRewards);
     event UnlockRequested(
         address indexed sender,
@@ -43,7 +47,10 @@ interface IAfCvx is IERC4626 {
             uint256 unlockedRewards,
             uint256 lockedRewards
         );
-    function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount);
+    function previewDistribute()
+        external
+        view
+        returns (uint256 cleverDepositAmount, uint256 convexStakeAmount, uint256 furnaceDirectDepositAmount);
     function previewRequestUnlock(uint256 assets) external view returns (uint256);
     function distribute(bool swap, uint256 minAmountOut) external;
     function requestUnlock(uint256 assets, address receiver, address owner)
