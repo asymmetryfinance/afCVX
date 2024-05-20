@@ -20,7 +20,7 @@ interface IAfCvx is IERC4626 {
     event OperatorSet(address indexed newOperator);
     event EmergencyShutdown();
     event Distributed(uint256 indexed cleverDepositAmount, uint256 indexed convexStakeAmount);
-    event Harvested(uint256 indexed cleverRewards, uint256 indexed convexStakedRewards);
+    event Harvested(uint256 indexed furnaceRewards, uint256 indexed cleverRewards, uint256 indexed convexRewards);
     event UnlockRequested(
         address indexed sender,
         address indexed receiver,
@@ -35,7 +35,14 @@ interface IAfCvx is IERC4626 {
     function getAvailableAssets()
         external
         view
-        returns (uint256 unlocked, uint256 lockedInClever, uint256 staked, uint256 unlockObligations);
+        returns (
+            uint256 unlocked,
+            uint256 lockedInClever,
+            uint256 staked,
+            uint256 unlockObligations,
+            uint256 unlockedRewards,
+            uint256 lockedRewards
+        );
     function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount);
     function previewRequestUnlock(uint256 assets) external view returns (uint256);
     function distribute(bool swap, uint256 minAmountOut) external;
@@ -43,7 +50,9 @@ interface IAfCvx is IERC4626 {
         external
         returns (uint256 unlockEpoch, uint256 shares);
     function withdrawUnlocked(address receiver) external;
-    function harvest(uint256 minAmountOut) external returns (uint256 rewards);
+    function harvest(uint256 minAmountOut)
+        external
+        returns (uint256 furnaceRewards, uint256 cleverRewards, uint256 convexRewards);
     function setCleverCvxStrategyShare(uint16 newShareBps) external;
     function setProtocolFee(uint16 newFeeBps) external;
     function setWithdrawalFee(uint16 newFeeBps) external;

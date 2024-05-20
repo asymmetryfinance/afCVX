@@ -124,7 +124,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         CLEVER_CVX_LOCKER.borrow(_calculateMaxBorrowAmount(), true);
     }
 
-    /// @notice Claims all realised CVX from Furnace and Clever clevCVX rewards
+    /// @notice Claims all realised CVX from Furnace and CLever clevCVX rewards
     /// @return furnaceRewards The amount of realised CVX claimed from Furnace
     /// @return cleverRewards The amount of clevCVX rewards claimed from CLever
     function claim() external onlyManager returns (uint256 furnaceRewards, uint256 cleverRewards) {
@@ -138,7 +138,7 @@ contract CleverCvxStrategy is ICleverCvxStrategy, TrackedAllowances, Ownable, UU
         if (cleverRewards > 0) {
             // claim rewards
             CLEVER_CVX_LOCKER.borrow(cleverRewards, false);
-            address(CVXCRV).safeTransfer(_manager, cleverRewards);
+            address(CLEVCVX).safeTransfer(_manager, cleverRewards);
         }
     }
 

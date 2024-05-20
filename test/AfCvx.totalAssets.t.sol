@@ -113,4 +113,39 @@ contract AfCvxTotalAssetsForkTest is BaseForkTest {
         assertEq(unlockObligations, 50e18);
         assertApproxEqAbs(afCvx.totalAssets(), 49.6e18, 0.03e18);
     }
+
+    function test_totalAssets_dripRewards() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+
+        uint256 initialTotalAssets = afCvx.totalAssets();
+        assertEq(initialTotalAssets, 99.6e18);
+
+        // simulate Clever rewards
+        skip(1 weeks);
+        _distributeCleverRewards(20e18);
+
+        // totalAssets() doesn't change
+        assertEq(afCvx.totalAssets(), initialTotalAssets);
+
+        vm.prank(operator);
+        (uint256 furnaceRewards, uint256 cleverRewards, uint256 convexRewards) = afCvx.harvest(0);
+        (,,,,, uint256 lockedRewards) = afCvx.getAvailableAssets();
+
+        // Rewards from each protocol is greater than zero, but totalAssets() doesn't change
+        assertGt(furnaceRewards, 0);
+        assertGt(cleverRewards, 0);
+        assertGt(convexRewards, 0);
+        assertEq(afCvx.totalAssets(), initialTotalAssets);
+
+        // clever and convex rewards are locked
+        assertEq(lockedRewards, cleverRewards + convexRewards);
+
+        // locked rewards are distributed over 2 weeks
+        skip(1 weeks);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + lockedRewards / 2);
+
+        skip(1 weeks);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + lockedRewards);
+    }
 }
