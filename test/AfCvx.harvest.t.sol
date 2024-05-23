@@ -64,4 +64,96 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         assertEq(unlockedRewards, initialLockedRewards);
         assertEq(lockedRewards, 0);
     }
+
+    function test_harvest_distributeAfterHarvest() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+
+        skip(1 weeks);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+
+        uint256 initialTotalAssets = afCvx.totalAssets();
+        (,,,,, uint256 initialLockedRewards) = afCvx.getAvailableAssets();
+
+        vm.roll(block.number + 1);
+        skip(1 weeks);
+
+        (,,,, uint256 unlockedRewards, uint256 lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards / 2);
+        assertEq(lockedRewards, initialLockedRewards / 2);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + initialLockedRewards / 2);
+
+        vm.prank(operator);
+        afCvx.distribute(false, 0);
+
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, 0);
+        assertEq(lockedRewards, initialLockedRewards / 2);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + initialLockedRewards / 2);
+    }
+
+    function test_harvest_noDistributionBetweenHarvests() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+        uint256 initialTotalAssets = afCvx.totalAssets();
+
+        skip(1 weeks);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+
+        (,,,,, uint256 initialLockedRewards) = afCvx.getAvailableAssets();
+
+        vm.roll(block.number + 1);
+        skip(2 weeks);
+
+        // all rewards were unlocked, but not re-deposited
+        (,,,, uint256 unlockedRewards, uint256 lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards);
+        assertEq(lockedRewards, 0);
+
+        uint256 totalAssets = afCvx.totalAssets();
+        assertEq(totalAssets, initialTotalAssets + unlockedRewards);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+        // totalAssets doesn't change
+        assertEq(afCvx.totalAssets(), totalAssets);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, 0);
+        assertGt(lockedRewards, 0);
+        // totalAssets doesn't change as previous unlocked rewards were deposited
+        assertEq(afCvx.totalAssets(), totalAssets);
+    }
+
+    function test_harvest_distributeBeforeHarvestCausesPriceSpike() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+
+        uint256 initialSharePrice = afCvx.previewMint(1e18);
+
+        skip(1 weeks);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
+        assertEq(afCvx.previewMint(1e18), initialSharePrice);
+
+        _deposit(0.00001e18);
+        _distributeAndBorrow();
+
+        // distribute before harvest causes rewards to be used to pay debt as a result TVL and afCVX price increase
+        assertGt(afCvx.previewMint(1e18), initialSharePrice);
+    }
 }

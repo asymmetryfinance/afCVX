@@ -46,8 +46,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
     uint64 public withdrawalLimitNextUpdate;
     uint16 public weeklyWithdrawalShareBps;
 
-    uint128 private lastLockedRewards;
-    uint64 private lockedRewardsLastUpdate;
+    uint128 public lastLockedRewards;
+    uint64 public lockedRewardsLastUpdate;
 
     modifier onlyOperatorOrOwner() {
         if (msg.sender != operator) {
@@ -162,7 +162,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         staked = CVX_REWARDS_POOL.balanceOf(address(this));
 
         (lockedRewards, unlockedRewards) = _getUnlockedRewards();
-        lockedRewards -= unlockedRewards;
     }
 
     function maxDeposit(address receiver)
@@ -450,7 +449,8 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
 
         // deposit unlocked rewards to Furnace
         if (furnaceDirectDepositAmount > 0) {
-            FURNACE.depositFor(address(cleverCvxStrategy), furnaceDirectDepositAmount);
+            _updateLockedRewards(lastLockedRewards - furnaceDirectDepositAmount.toUint128());
+            _depositUnlockedRewardsToFurnace(furnaceDirectDepositAmount);
         }
 
         emit Distributed(cleverDepositAmount, convexStakeAmount, furnaceDirectDepositAmount);
@@ -482,14 +482,23 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
             address(CVX).safeTransfer(protocolFeeCollector, fee);
         }
 
-        // Convex and CLever rewards are locked and will be distributed over 2 weeks to prevent TVL spikes
         (uint256 locked, uint256 unlocked) = _getUnlockedRewards();
-        lastLockedRewards = (locked - unlocked + convexRewards + cleverRewards).toUint128();
-        lockedRewardsLastUpdate = block.timestamp.toUint64();
+        // Deposit the current unlock rewards to Furnace to prevent unlock rewards override
+        if (unlocked > 0) {
+            _depositUnlockedRewardsToFurnace(unlocked);
+        }
+
+        // Update locked rewards with newly harvested Convex and CLever rewards.
+        // They will be distributed over 2 weeks to prevent TVL spikes
+        _updateLockedRewards((locked + convexRewards + cleverRewards).toUint128());
 
         emit Harvested(furnaceRewards, cleverRewards, convexRewards);
 
         _updateWeeklyWithdrawalLimit();
+    }
+
+    function _depositUnlockedRewardsToFurnace(uint256 rewards) private {
+        FURNACE.depositFor(address(cleverCvxStrategy), rewards);
     }
 
     /////////////////////////////////////////////////////////////////
@@ -557,9 +566,15 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         return value * bps / BASIS_POINT_SCALE;
     }
 
-    function _getUnlockedRewards() internal view returns (uint256 locked, uint256 unlocked) {
+    function _getUnlockedRewards() private view returns (uint256 locked, uint256 unlocked) {
         uint256 timeElapsed = block.timestamp - lockedRewardsLastUpdate;
         locked = lastLockedRewards;
         unlocked = timeElapsed >= REWARDS_UNLOCK_PERIOD ? locked : locked * timeElapsed / REWARDS_UNLOCK_PERIOD;
+        locked -= unlocked;
+    }
+
+    function _updateLockedRewards(uint128 newLockedRewards) private {
+        lastLockedRewards = newLockedRewards;
+        lockedRewardsLastUpdate = block.timestamp.toUint64();
     }
 }
