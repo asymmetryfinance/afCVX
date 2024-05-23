@@ -440,8 +440,6 @@ contract AfCvx is IAfCvx, TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20P
         (uint256 cleverDepositAmount, uint256 convexStakeAmount, uint256 furnaceDirectDepositAmount) =
             _previewDistribute();
 
-        if (cleverDepositAmount == 0 && convexStakeAmount == 0) return;
-
         if (cleverDepositAmount > 0) {
             cleverCvxStrategy.deposit(cleverDepositAmount, swap, minAmountOut);
         }
