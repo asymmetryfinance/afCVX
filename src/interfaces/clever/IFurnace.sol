@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.25;
-
-IFurnace constant FURNACE = IFurnace(address(0xCe4dCc5028588377E279255c0335Effe2d7aB72a));
 
 interface IFurnace {
     /// @dev Return the amount of clevCVX unrealised and realised of user.

@@ -1,28 +1,8 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.25;
 
-interface ICleverCvxStrategy {
-    struct UnlockRequest {
-        uint192 unlockAmount;
-        uint64 unlockEpoch;
-    }
-
-    struct UnlockInfo {
-        UnlockRequest[] unlocks;
-        uint256 nextUnlockIndex;
-    }
-
-    error InvalidAddress();
-    error InsufficientFurnaceBalance();
-    error UnlockInProgress();
-    error InvalidState();
-    error MaintenanceWindow();
-    error Paused();
-
-    event OperatorSet(address indexed newOperator);
-    event EmergencyShutdown();
-
+interface ICleverStrategy {
+    function netAssets() external view returns (uint256);
     function totalValue() external view returns (uint256 deposited, uint256 rewards, uint256 obligations);
     function maxTotalUnlock() external view returns (uint256 maxUnlock);
     function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external;

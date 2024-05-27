@@ -8,13 +8,6 @@ optimizer-runs = 10_000
 verbosity = 3
 evm_version = "cancun"
 
-remappings = [
-  "forge-std=lib/forge-std/src/",
-  "solady=lib/solady/src/",
-  "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
-  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
-]
-
 gas_reports = ["AfCvx", "CleverCvxStrategy"]
 
 [fmt]
