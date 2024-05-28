@@ -115,7 +115,7 @@ function borrow() external
 ### Harvesting Rewards
 
 > [!IMPORTANT]
-> The harvest function must be called at the beginning of the epoch after Convex, CLever and Furnace rewards distribution.
+> Convex rewards and Furnace realised CVX are distributed gradually and can be harvested at any time. CLever rewards are distributed every two weeks and used to reduce the debt. To ensure that CLever strategy is at the maximum leverage `harvest` function should be called after CLever rewards distribution.
 
 To harvest rewards from the underling strategies as the operator call `AfCvx::harvest` function passing the minimum amount of CVX to receive when swapping cvxCRV to CVX:
 
@@ -149,15 +149,65 @@ function unlock() external;
 > [!IMPORTANT]
 > The functions must be called as close to the end of the epoch as possible because users won't be able to request unlocks between the last `CLeverCvxStrategy::unlock` call and the beginning of a new epoch.
 
-> [!NOTE]
+> [!NOTE] 
 > `CLeverCvxStrategy::repay` and `CLeverCvxStrategy::unlock` are implemented as two separate functions because `CLeverCvxLocker` contract doesn't allow repaying and unlocking in the same block.
 
 ## User
 
+> [!NOTE] 
+> `afCvx` is [ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) compliant contract that accepts CVX deposit and issues afCvx shares.
+
 ### Depositing
+
+To deposit CVX to `afCvx` first approve the vault to spend CVX by calling `CVX::approve` function, then call `afCvx::deposit` passing the amount of CVX and the address to receive the afCvx.
+
+```solidity
+function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+```
 
 ### Withdrawing
 
+> [!IMPORTANT] 
+> Withdrawal is subjected to a withdrawal fee and weekly withdrawal limit.
+
+To withdraw CVX from the vault first approve afCvx to be burnt by calling `afCvx::approve` function, then call `afCvx::withdraw` passing the amount of CVX to withdraw, the address to receive CVX and the owner of afCvx shares.
+
+```solidity
+function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+```
+
+Alternatively, `afCvx::redeem` function can be used to redeem afCvx shares for CVX.
+
+```solidity
+function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+```
+
 ### Requesting Unlock
 
+If a user wishes to withdraw more CVX than allowed by the weekly withdrawal limit they can request an unlock. Due to the nature of the underlying `CLeverCVXLocker` contract, assets requested to be unlocked won't be withdrawable immediately but is instead queued up for a later time.
+
+To request unlock call `afCvx::requestUnlock` function passing the amount of CVX to unlock, the address to receive CVX and the owner of afCvx shares.
+
+```solidity
+function requestUnlock(uint256 assets, address receiver, address owner)
+      external
+      returns (uint256 unlockEpoch, uint256 shares)
+```
+
+The function returns the epoch number when the shares will be available. 
+
+The requested unlocks information can always be checked by calling `CLeverCvxStrategy::getRequestedUnlocks`
+
+```solidity
+function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks)
+```
+> [!IMPORTANT] 
+> Request unlock burns the underlying afCvx shares.
+
 ### Withdrawing Unlocked
+
+Once the unlock time passed a user can withdraw CVX requested earlier by calling `afCvx::withdrawUnlocked` and passing the address of a receiver that was used to request the unlock.
+
+```solidity
+function withdrawUnlocked(address receiver) external
+```
