@@ -203,56 +203,57 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
     /// @inheritdoc ERC4626Upgradeable
     function totalAssets() public view override returns (uint256) {
-        uint256 _idle = CVX.balanceOf(address(this));
-        uint256 _assetsInConvex = CVX_REWARDS_POOL.balanceOf(address(this));
-        uint256 _assetsInCLever = cleverStrategy.netAssets(); // dev: `_deposited + _depositedInFurnace - _borrowed - unlockObligations`
-        return _idle + _assetsInConvex + _assetsInCLever;
+        return
+            CVX.balanceOf(address(this)) // Idle CVX
+            + CVX_REWARDS_POOL.balanceOf(address(this)) // Staked CVX
+            + cleverStrategy.netAssets(); // `_depositedInLocker + _depositedInFurnace - _borrowed - unlockObligations`
     }
 
     /// @notice Returns the maximum amount of assets that can be unlocked by the `owner`.
-    function maxRequestUnlock(address owner) public view returns (uint256 maxAssets) {
+    function maxRequestUnlock(address _owner) public view returns (uint256) {
         if (paused) return 0;
 
         return Math.min(
-            _convertToAssets(balanceOf(owner), Math.Rounding.Floor),
-            cleverStrategy.maxTotalUnlock()
+            balanceOf(_owner),
+            _convertToShares(
+                cleverStrategy.netAssets(), // `_depositedInLocker + _depositedInFurnace - _borrowed - unlockObligations`
+                Math.Rounding.Floor
+            )
         );
     }
 
-    /// @notice Returns the amount of shares to burn to unlock the given amount of assets.
-    function previewRequestUnlock(uint256 assets) public view returns (uint256 shares) {
-        return _convertToShares(assets, Math.Rounding.Floor);
+    /// @notice Returns the amount of assets that can be unlocked by burning _shares
+    function previewRequestUnlock(uint256 _shares) public view returns (uint256) {
+        uint256 _assets = _convertToAssets(_shares, Math.Rounding.Floor);
+        return _assets - cleverStrategy.repaymentFee(_assets);
     }
 
     // ============================================================================================
     // Unlock from Clever
     // ============================================================================================
 
-    /// @notice Requests CVX assets to be unlocked from Clever CVX locker, by burning the `owner`'s (afCVX) shares.
-    ///         The caller of this function does not have to be the `owner`
-    ///         if the `owner` has approved the caller to spend their afCVX.
-    /// @dev Can be called only if afCVX is not paused.
-    ///      Withdrawal fee is not taken.
-    /// @param assets The amount of assets (CVX) to unlock.
-    /// @param receiver The address to receive the assets (CVX).
-    /// @param owner The address of the owner for which the shares (afCVX) are burned.
-    /// @return unlockEpoch The epoch number when unlocked assets can be withdrawn (1 to 17 weeks from the request).
-    /// @return shares The amount of shares (afCVX) burned.
-    function requestUnlock(uint256 assets, address receiver, address owner) external returns (uint256 unlockEpoch, uint256 shares) {
-        uint256 maxAssets = maxRequestUnlock(owner);
-        if (assets > maxAssets) {
-            revert ExceededMaxUnlock(owner, assets, maxAssets);
-        }
+    /// @notice Requests assets to be unlocked from CLever, by burning shares
+    /// @dev Withdrawal fee is not charged, but CLever repayment fee is charged
+    /// @param _shares The amount of shares to burn
+    /// @param _receiver The receiver of the assets
+    /// @param _owner The shares owner
+    /// @return _unlockEpoch The epoch number when unlocked assets can be withdrawn
+    /// @return _assets The amount of assets that will be unlocked
+    function requestUnlock(uint256 _shares, address _receiver, address _owner) external returns (uint256 _unlockEpoch, uint256 _assets) {
+        uint256 _maxShares = maxRequestUnlock(_owner);
+        if (_shares > _maxShares) revert ERC4626ExceededMaxRedeem(_owner, _shares, _maxShares);
 
-        shares = previewRequestUnlock(assets);
-        if (msg.sender != owner) {
-            _spendAllowance(owner, msg.sender, shares);
-        }
+        _assets = previewRequestUnlock(_shares);
 
-        _burn(owner, shares);
-        unlockEpoch = cleverStrategy.requestUnlock(assets, receiver);
+        uint256 _maxAssets = cleverStrategy.maxTotalUnlock();
+        if (_assets > _maxAssets) revert ExceededMaxUnlock(_owner, _assets, _maxAssets); // dev: sanity check
 
-        emit UnlockRequested(msg.sender, receiver, owner, assets, shares, unlockEpoch);
+        if (msg.sender != _owner) _spendAllowance(_owner, msg.sender, _shares);
+
+        _burn(_owner, _shares);
+        _unlockEpoch = cleverStrategy.requestUnlock(_assets, _receiver);
+
+        emit UnlockRequested(msg.sender, _receiver, _owner, _assets, _shares, _unlockEpoch);
     }
 
     /// @notice Withdraws assets requested earlier by calling `requestUnlock`.
@@ -261,15 +262,14 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (paused) revert Paused();
 
         uint256 cvxUnlocked = cleverStrategy.withdrawUnlocked(receiver);
-        if (cvxUnlocked != 0) {
-            emit UnlockedWithdrawn(msg.sender, receiver, cvxUnlocked);
-        }
+        emit UnlockedWithdrawn(msg.sender, receiver, cvxUnlocked);
     }
 
     // ============================================================================================
     // Operator functions
     // ============================================================================================
 
+    // @todo - can combine with harvest?
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
     function distribute(bool _swap, uint256 _minAmountOut) external {
         if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
