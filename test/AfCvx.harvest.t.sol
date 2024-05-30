@@ -7,7 +7,7 @@ import { BaseForkTest } from "test/utils/BaseForkTest.sol";
 
 contract AfCvxHarvestForkTest is BaseForkTest {
     function test_harvest() public {
-        uint256 amount = 100 ether;
+        uint256 amount = 100e18;
         _deposit(amount);
 
         assertEq(afCvx.weeklyWithdrawalLimit(), 0);
@@ -20,96 +20,140 @@ contract AfCvxHarvestForkTest is BaseForkTest {
         _updateWeeklyWithdrawalLimit(200);
 
         vm.prank(operator);
-        uint256 rewards = afCvx.harvest(0);
+        (uint256 furnaceRewards, uint256 cleverRewards, uint256 convexStakedRewards) = afCvx.harvest(0);
 
-        assertEq(rewards, 0);
+        assertEq(furnaceRewards, 0);
+        assertEq(cleverRewards, 0);
+        assertEq(convexStakedRewards, 0);
         // weekly withdraw limit is updated when harvesting rewards
         assertEq(afCvx.weeklyWithdrawalLimit(), 1.992e18);
         assertEq(afCvx.withdrawalLimitNextUpdate(), block.timestamp + 1 weeks);
 
         skip(1 weeks);
+        // simulate Clever rewards
+        _distributeCleverRewards(2e18);
         // simulate Furnace rewards
-        _distributeFurnaceRewards(10 ether);
+        _distributeFurnaceRewards(10e18);
 
-        (, uint256 cleverRewards,) = cleverCvxStrategy.totalValue();
-        assertGt(cleverRewards, 0, "no clever rewards");
+        (, uint256 rewards,) = cleverCvxStrategy.totalValue();
+        assertGt(rewards, 0, "no rewards");
 
-        vm.prank(owner);
-        rewards = afCvx.harvest(0);
+        uint256 totalAssetsBefore = afCvx.totalAssets();
+        vm.prank(operator);
+        (furnaceRewards, cleverRewards, convexStakedRewards) = afCvx.harvest(0);
+        uint256 totalAssetsAfter = afCvx.totalAssets();
+        (,,,, uint256 unlockedRewards, uint256 lockedRewards) = afCvx.getAvailableAssets();
+        uint256 initialLockedRewards = lockedRewards;
 
-        assertGt(rewards, cleverRewards, "no convex rewards");
+        // TVL should not change after harvest as rewards are distributed over time
+        assertEq(totalAssetsAfter, totalAssetsBefore, "TVL changed after harvest");
+        assertGt(rewards, furnaceRewards, "no convex rewards");
         assertGt(CVX.balanceOf(feeCollector), 0, "fee isn't collected");
-    }
+        assertEq(lockedRewards, cleverRewards + convexStakedRewards, "invalid locked rewards");
+        assertEq(unlockedRewards, 0, "unlock rewards greater than zero");
 
-    /// @dev Attacker tries to sandwich afCvx rewards harvesting with deposit and withdraw
-    function test_harvest_depositWithdrawSandwichAttack() public {
-        // 1% protocolFee, 1% withdrawal fee
-        _setFees(100, 100);
-        // 2% of TVL can be withdrawn
-        _updateWeeklyWithdrawalLimit(200);
-
-        _deposit(1e24);
-        _distributeAndBorrow();
         skip(1 weeks);
 
-        uint256 assetsIn = 1e22;
-        address attacker = _createAccountWithCvx("attacker", assetsIn);
-        uint256 shares = _deposit(attacker, assetsIn);
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards / 2);
+        assertEq(lockedRewards, initialLockedRewards / 2);
 
-        // simulate Furnace rewards
-        _distributeFurnaceRewards(5e22);
-        vm.prank(operator);
-        // harvested rewards transferred to afCvx increasing total assets
-        afCvx.harvest(0);
+        skip(1 weeks);
 
-        // Attacker gets less than deposited
-        vm.startPrank(attacker);
-        afCvx.approve(address(afCvx), shares);
-        uint256 assetsOut = afCvx.redeem(shares, attacker, attacker);
-
-        assertGt(assetsIn, assetsOut, "attacker withdrew more than deposited");
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards);
+        assertEq(lockedRewards, 0);
     }
 
-    /// @dev Attacker tries to sandwich afCvx rewards harvesting with deposit and unlock
-    function test_harvest_depositUnlockSandwichAttack() public {
-        // 1% protocolFee, 1% withdrawal fee
-        _setFees(100, 100);
-        // 2% of TVL can be withdrawn
-        _updateWeeklyWithdrawalLimit(200);
-
-        _deposit(1e22);
+    function test_harvest_distributeAfterHarvest() public {
+        _deposit(100e18);
         _distributeAndBorrow();
-        skip(16 weeks);
 
-        uint256 assetsIn = 1e21;
-        address attacker = _createAccountWithCvx("attacker", assetsIn);
-        uint256 shares = _deposit(attacker, assetsIn);
+        skip(1 weeks);
 
-        // simulate Furnace rewards
-        _distributeFurnaceRewards(5e21);
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
         vm.prank(operator);
-        // harvested rewards transferred to afCvx increasing the total assets
         afCvx.harvest(0);
 
-        vm.startPrank(attacker);
-        afCvx.approve(address(afCvx), shares);
-        uint256 maxUnlock = afCvx.maxRequestUnlock(attacker);
-        (uint256 unlockEpoch,) = afCvx.requestUnlock(maxUnlock, attacker, attacker);
-        uint256 currentEpoch = block.timestamp / 1 weeks;
-        assertEq(unlockEpoch, currentEpoch + 1, "unlock epoch isn't the next epoch");
+        uint256 initialTotalAssets = afCvx.totalAssets();
+        (,,,,, uint256 initialLockedRewards) = afCvx.getAvailableAssets();
 
-        // unlock CVX locked in clever to fulfill the unlock request
-        _repayAndUnlock();
+        vm.roll(block.number + 1);
+        skip(1 weeks);
 
-        vm.warp(currentEpoch * 1 weeks + 1 weeks);
-        vm.prank(0x11E91BB6d1334585AA37D8F4fde3932C7960B938);
-        CLEVER_CVX_LOCKER.processUnlockableCVX();
+        (,,,, uint256 unlockedRewards, uint256 lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards / 2);
+        assertEq(lockedRewards, initialLockedRewards / 2);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + initialLockedRewards / 2);
 
-        // Attacker gets more than deposited since there is no withdrawal fee on unlock
-        vm.prank(attacker);
-        afCvx.withdrawUnlocked(attacker);
-        uint256 profit = CVX.balanceOf(attacker) - assetsIn;
+        vm.prank(operator);
+        afCvx.distribute(false, 0);
 
-        assertApproxEqAbs(profit, 0.183e18, 0.01e18);
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, 0);
+        assertEq(lockedRewards, initialLockedRewards / 2);
+        assertEq(afCvx.totalAssets(), initialTotalAssets + initialLockedRewards / 2);
+    }
+
+    function test_harvest_noDistributionBetweenHarvests() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+        uint256 initialTotalAssets = afCvx.totalAssets();
+
+        skip(1 weeks);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+
+        (,,,,, uint256 initialLockedRewards) = afCvx.getAvailableAssets();
+
+        vm.roll(block.number + 1);
+        skip(2 weeks);
+
+        // all rewards were unlocked, but not re-deposited
+        (,,,, uint256 unlockedRewards, uint256 lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, initialLockedRewards);
+        assertEq(lockedRewards, 0);
+
+        uint256 totalAssets = afCvx.totalAssets();
+        assertEq(totalAssets, initialTotalAssets + unlockedRewards);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+        // totalAssets doesn't change
+        assertEq(afCvx.totalAssets(), totalAssets);
+
+        vm.prank(operator);
+        afCvx.harvest(0);
+        (,,,, unlockedRewards, lockedRewards) = afCvx.getAvailableAssets();
+        assertEq(unlockedRewards, 0);
+        assertGt(lockedRewards, 0);
+        // totalAssets doesn't change as previous unlocked rewards were deposited
+        assertEq(afCvx.totalAssets(), totalAssets);
+    }
+
+    function test_harvest_distributeBeforeHarvestCausesPriceSpike() public {
+        _deposit(100e18);
+        _distributeAndBorrow();
+
+        uint256 initialSharePrice = afCvx.previewMint(1e18);
+
+        skip(1 weeks);
+
+        // simulate Clever rewards
+        _distributeCleverRewards(10e18);
+
+        assertEq(afCvx.previewMint(1e18), initialSharePrice);
+
+        _deposit(0.00001e18);
+        _distributeAndBorrow();
+
+        // distribute before harvest causes rewards to be used to pay debt as a result TVL and afCVX price increase
+        assertGt(afCvx.previewMint(1e18), initialSharePrice);
     }
 }

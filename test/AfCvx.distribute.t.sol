@@ -15,7 +15,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockCleverTotalValue(100e18, 0, 0);
         _mockStakedTotalValue(10e18, 0);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
         assertEq(cleverDepositAmount, 0);
         assertEq(convexStakeAmount, 0);
     }
@@ -25,7 +25,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         uint256 amount = 1000e18;
         _deposit(amount);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 800e18);
         assertEq(convexStakeAmount, 200e18);
@@ -38,7 +38,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockStakedTotalValue(200e18, 0);
         _deposit(amount);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 40e18);
         assertEq(convexStakeAmount, 10e18);
@@ -52,7 +52,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockStakedTotalValue(100e18, 0);
         _deposit(amount);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 0);
         assertEq(convexStakeAmount, amount);
@@ -65,7 +65,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockStakedTotalValue(10e18, 0);
         _deposit(amount);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 8e18);
         assertEq(convexStakeAmount, 2e18);
@@ -77,7 +77,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockCleverTotalValue(40e18, 0, 70e18);
         _mockStakedTotalValue(20e18, 0);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 182e18);
         assertEq(convexStakeAmount, 18e18);
@@ -85,7 +85,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockCleverTotalValue(400e18, 0, 700e18);
         _mockStakedTotalValue(200e18, 0);
 
-        (cleverDepositAmount, convexStakeAmount) = afCvx.previewDistribute();
+        (cleverDepositAmount, convexStakeAmount,) = afCvx.previewDistribute();
 
         assertEq(cleverDepositAmount, 200e18);
         assertEq(convexStakeAmount, 0);
@@ -102,7 +102,7 @@ contract AfCvxDistributeForkTest is BaseForkTest {
         _mockCleverTotalValue(lockedInClever, 0, 0);
         _mockStakedTotalValue(staked, 0);
 
-        (uint256 cleverDepositAmount, uint256 convexStakeAmount) = afCvx.previewDistribute();
+        (uint256 cleverDepositAmount, uint256 convexStakeAmount,) = afCvx.previewDistribute();
         total += (cleverDepositAmount + convexStakeAmount);
         lockedInClever += cleverDepositAmount;
         uint256 cleverShareAfter = lockedInClever.mulDiv(BASIS_POINT_SCALE, total);

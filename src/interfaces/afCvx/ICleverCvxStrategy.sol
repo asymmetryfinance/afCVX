@@ -27,7 +27,7 @@ interface ICleverCvxStrategy {
     function maxTotalUnlock() external view returns (uint256 maxUnlock);
     function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external;
     function borrow() external;
-    function claim() external returns (uint256);
+    function claim() external returns (uint256 furnaceRewards, uint256 cleverRewards);
     function requestUnlock(uint256 amount, address to) external returns (uint256 unlockEpoch);
     function withdrawUnlocked(address account) external returns (uint256 cvxUnlocked);
     function setOperator(address newOperator) external;

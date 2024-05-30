@@ -7,6 +7,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { CVX } from "src/interfaces/convex/Constants.sol";
 import { CVX_REWARDS_POOL } from "src/interfaces/convex/ICvxRewardsPool.sol";
 import { FURNACE } from "src/interfaces/clever/IFurnace.sol";
+import { CLEVER_CVX_LOCKER, EpochUnlockInfo } from "src/interfaces/clever/ICLeverCVXLocker.sol";
 import { SimpleProxyFactory } from "src/utils/SimpleProxyFactory.sol";
 import { CleverCvxStrategy } from "src/strategies/CleverCvxStrategy.sol";
 import { AfCvx } from "src/AfCvx.sol";
@@ -112,6 +113,14 @@ abstract contract BaseForkTest is Test {
         vm.roll(block.number + 1);
         cleverCvxStrategy.unlock();
         vm.roll(block.number + 1);
+        vm.stopPrank();
+    }
+
+    function _distributeCleverRewards(uint256 rewards) internal {
+        address user = _createAccountWithCvx(rewards);
+        vm.startPrank(user);
+        CVX.approve(address(CLEVER_CVX_LOCKER), rewards);
+        CLEVER_CVX_LOCKER.donate(rewards);
         vm.stopPrank();
     }
 

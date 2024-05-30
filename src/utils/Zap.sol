@@ -29,12 +29,12 @@ library Zap {
     address internal constant CVX_ETH_POOL = 0xB576491F1E6e5E62f1d8F26062Ee822B40B0E0d4;
     address internal constant CVX_CLEVCVX_POOL = 0xF9078Fb962A7D13F55d40d49C8AA6472aBD1A5a6;
 
-    function swapCvxToClevCvx(uint256 cvxAmount, uint256 minAmountOut) external returns (uint256) {
+    function swapCvxToClevCvx(uint256 cvxAmount, uint256 minAmountOut) internal returns (uint256) {
         CVX.forceApprove(CVX_CLEVCVX_POOL, cvxAmount);
         return ICurveFactoryPlainPool(CVX_CLEVCVX_POOL).exchange(0, 1, cvxAmount, minAmountOut);
     }
 
-    function swapCvxCrvToCvx(uint256 cvxCrvAmount, uint256 minAmountOut) external returns (uint256) {
+    function swapCvxCrvToClevCvx(uint256 cvxCrvAmount, uint256 minAmountOut) internal returns (uint256) {
         // cvxCRV -> CRV
         CVXCRV.forceApprove(CVXCRV_CRV_POOL, cvxCrvAmount);
         uint256 crvAmount = ICurveFactoryPlainPool(CVXCRV_CRV_POOL).exchange(1, 0, cvxCrvAmount, 0);
@@ -44,6 +44,9 @@ library Zap {
         uint256 ethAmount = ICurveCryptoPool(CRV_ETH_POOL).exchange_underlying(2, 1, crvAmount, 0);
 
         // ETH -> CVX
-        return ICurveCryptoPool(CVX_ETH_POOL).exchange_underlying{ value: ethAmount }(0, 1, ethAmount, minAmountOut);
+        uint256 cvxAmount = ICurveCryptoPool(CVX_ETH_POOL).exchange_underlying{ value: ethAmount }(0, 1, ethAmount, 0);
+
+        // CVX -> clevCVX
+        return swapCvxToClevCvx(cvxAmount, minAmountOut);
     }
 }
