@@ -20,6 +20,10 @@ contract DepositTests is Base {
     function testDeposit(uint256 _assets) public {
         vm.assume(_assets > 0 ether && _assets < 100 ether);
 
+        // Harvest before upgrade because totalAssets does not include rewards
+        vm.prank(owner);
+        AFCVX_PROXY.harvest(0);
+
         // Deposit before upgrade
 
         uint256 _totalSupply = AFCVX_PROXY.totalSupply();
@@ -68,6 +72,10 @@ contract DepositTests is Base {
 
     function testMint(uint256 _shares) public {
         vm.assume(_shares > 0 ether && _shares < 100 ether);
+
+        // Harvest before upgrade because totalAssets does not include rewards
+        vm.prank(owner);
+        AFCVX_PROXY.harvest(0);
 
         // Deposit before upgrade
 

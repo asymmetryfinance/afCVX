@@ -4,8 +4,10 @@ pragma solidity 0.8.25;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
+import {IConvexRewardsPool} from "../../src/interfaces/convex/IConvexRewardsPool.sol";
+
 import {AfCvx, Ownable} from "../../src/AfCvx.sol";
-import {CleverCvxStrategy, IFurnace} from "../../src/strategies/CleverCvxStrategy.sol";
+import {CleverCvxStrategy, ICLeverLocker, IFurnace} from "../../src/strategies/CleverCvxStrategy.sol";
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -20,12 +22,15 @@ abstract contract Base is Test {
     IERC20Metadata public constant CVXCRV = IERC20Metadata(0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7);
 
     IFurnace public constant FURNACE = IFurnace(0xCe4dCc5028588377E279255c0335Effe2d7aB72a);
+    ICLeverLocker public constant CLEVER_CVX_LOCKER = ICLeverLocker(0x96C68D861aDa016Ed98c30C810879F9df7c64154);
 
     AfCvx public afCvxImplementation;
     CleverCvxStrategy public cleverCvxStrategyImplementation;
 
     AfCvx public constant AFCVX_PROXY = AfCvx(payable(address(0x8668a15b7b023Dc77B372a740FCb8939E15257Cf)));
     CleverCvxStrategy public constant CLEVERCVXSTRATEGY_PROXY = CleverCvxStrategy(address(0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a));
+
+    IConvexRewardsPool public constant CVX_REWARDS_POOL = IConvexRewardsPool(0xCF50b810E57Ac33B91dCF525C6ddd9881B139332);
 
     // ============================================================================================
     // Setup
@@ -56,7 +61,7 @@ abstract contract Base is Test {
     function _createUser(string memory _name) internal returns (address payable) {
         address payable _user = payable(makeAddr(_name));
         vm.deal({ account: _user, newBalance: 100 ether });
-        deal({ token: address(CVX), to: _user, give: 10_000_000 * 10 ** CVX.decimals() });
+        deal({ token: address(CVX), to: _user, give: 100_000_000 * 10 ** CVX.decimals() });
         return _user;
     }
 

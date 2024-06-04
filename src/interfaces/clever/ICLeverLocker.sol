@@ -21,4 +21,5 @@ interface ICLeverLocker {
     function borrow(uint256 amount, bool depositToFurnace) external;
     function harvest(address recipient, uint256 minimumOut) external returns (uint256);
     function processUnlockableCVX() external;
+    function updateRepayFeePercentage(uint256 _feePercentage) external;
 }

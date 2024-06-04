@@ -6,6 +6,8 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {IAfCvx} from "../interfaces/asymmetry/IAfCvx.sol";
+
 import {ICLeverLocker} from "../interfaces/clever/ICLeverLocker.sol";
 import {IFurnace} from "../interfaces/clever/IFurnace.sol";
 
@@ -40,6 +42,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     ///         Maintenance window is a period between the last `unlock()` call and the beginning of the next epoch
     uint256 public maintenanceWindowEnd;
 
+    uint256 private constant PRECISION = 10_000;
     uint256 private constant CLEVER_PRECISION = 1e9;
     uint256 private constant REWARDS_DURATION = 1 weeks;
 
@@ -54,9 +57,23 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     constructor(address _manager) {
+        // @todo - make sure _manager is afcvx
         _disableInitializers();
         manager = _manager;
     }
+
+    // ============================================================================================
+    // Owner functions
+    // ============================================================================================
+
+    function setOperator(address _operator) external onlyOwner {
+        if (_operator == address(0)) revert InvalidAddress();
+
+        operator = _operator;
+        emit OperatorSet(_operator);
+    }
+
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
 
     // ============================================================================================
     // Modifiers
@@ -88,12 +105,14 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     function netAssets() public view returns (uint256) {
-        uint256 _unlockObligations = unlockObligations;
         (uint256 _deposited, , , uint256 _borrowed, ) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        (uint256 _depositedInFurnace, ) = FURNACE.getUserInfo(address(this));
-        if (_unlockObligations > _deposited + _depositedInFurnace - _borrowed) revert InvalidState(); // dev: sanity check
-
-        return _deposited + _depositedInFurnace - _borrowed - unlockObligations;
+        (uint256 _unrealizedFurnace, uint256 _realizedFurnace) = FURNACE.getUserInfo(address(this));
+        return
+            _deposited
+            + _unrealizedFurnace
+            + (_realizedFurnace == 0 ? 0 : (_realizedFurnace - _realizedFurnace * IAfCvx(manager).protocolFeeBps() / PRECISION))
+            - (_borrowed == 0 ? 0 : _borrowed * (CLEVER_CVX_LOCKER.repayFeePercentage() + CLEVER_PRECISION) / CLEVER_PRECISION)
+            - unlockObligations;
     }
 
     function repaymentFee(uint256 _assets) public view returns (uint256) {
@@ -101,20 +120,32 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     }
 
     /// @notice Returns the net assets in the strategy minus a fee on the debt
-    function maxTotalUnlock() external view returns (uint256) {
-        (, , , uint256 _borrowed, ) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-        return netAssets() - repaymentFee(_borrowed);
+    function maxTotalUnlock() external view returns (uint256 _maxUnlock) {
+        (uint256 _unrealizedFurnace,) = FURNACE.getUserInfo(address(this));
+        uint256 _repayAmount = _unrealizedFurnace * CLEVER_PRECISION / (CLEVER_PRECISION + CLEVER_CVX_LOCKER.repayFeePercentage());
+
+        (uint256 _deposited, , , uint256 _borrowed, ) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+
+        if (_borrowed > _repayAmount) {
+            _borrowed -= _repayAmount;
+            _maxUnlock = _deposited - _borrowed * CLEVER_PRECISION / CLEVER_CVX_LOCKER.reserveRate();
+        } else {
+            _maxUnlock = _deposited;
+        }
+
+        uint256 _unlockObligations = unlockObligations;
+        _maxUnlock = _maxUnlock > _unlockObligations ? _maxUnlock - _unlockObligations : 0;
     }
 
-    function getRequestedUnlocks(address account) external view returns (UnlockRequest[] memory unlocks) {
-        UnlockRequest[] storage accountUnlocks = requestedUnlocks[account].unlocks;
-        uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
+    function getRequestedUnlocks(address _account) external view returns (UnlockRequest[] memory _unlocks) {
+        UnlockRequest[] storage accountUnlocks = requestedUnlocks[_account].unlocks;
+        uint256 nextUnlockIndex = requestedUnlocks[_account].nextUnlockIndex;
         uint256 unlocksLength = accountUnlocks.length;
-        unlocks = new UnlockRequest[](unlocksLength - nextUnlockIndex);
-        for (uint256 i; nextUnlockIndex < unlocksLength; nextUnlockIndex++) {
-            unlocks[i].unlockEpoch = accountUnlocks[nextUnlockIndex].unlockEpoch;
-            unlocks[i].unlockAmount = accountUnlocks[nextUnlockIndex].unlockAmount;
-            i++;
+        _unlocks = new UnlockRequest[](unlocksLength - nextUnlockIndex);
+        for (uint256 i; nextUnlockIndex < unlocksLength; nextUnlockIndex++) { // @todo - gas optimization ++i
+            _unlocks[i].unlockEpoch = accountUnlocks[nextUnlockIndex].unlockEpoch;
+            _unlocks[i].unlockAmount = accountUnlocks[nextUnlockIndex].unlockAmount;
+            i++; // @todo - gas optimization ++i
         }
     }
 
@@ -122,25 +153,25 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Manager functions
     // ============================================================================================
 
-    /// @notice deposits CVX to the strategy
-    /// @param cvxAmount amount of CVX tokens to deposit
-    /// @param swap a flag indicating whether CVX should be swapped on Curve for clevCVX or deposited on Clever.
-    /// @param minAmountOut minimum amount of clevCVX to receive after the swap. Only used if `swap` is true
-    function deposit(uint256 cvxAmount, bool swap, uint256 minAmountOut) external onlyManager unlockNotInProgress {
-        CVX.safeTransferFrom(msg.sender, address(this), cvxAmount);
-        if (swap) {
-            uint256 clevCvxAmount = Zap.swapCvxToClevCvx(cvxAmount, minAmountOut);
+    /// @notice Deposits CVX to the strategy
+    /// @param _assets The amount of assets to deposit
+    /// @param _swap A flag indicating whether CVX should be swapped on Curve for clevCVX or deposited on Clever
+    /// @param _minAmountOut The minimum amount of clevCVX to receive after the swap. Only used if `swap` is true
+    function deposit(uint256 _assets, bool _swap, uint256 _minAmountOut) external onlyManager unlockNotInProgress {
+        CVX.safeTransferFrom(msg.sender, address(this), _assets);
+        if (_swap) {
+            uint256 clevCvxAmount = Zap.swapCvxToClevCvx(_assets, _minAmountOut);
             FURNACE.deposit(clevCvxAmount);
         } else {
-            CLEVER_CVX_LOCKER.deposit(cvxAmount);
+            CLEVER_CVX_LOCKER.deposit(_assets);
         }
     }
 
-    /// @notice claims all realised CVX from Furnace
-    /// @return rewards amount of realised CVX
-    function claim() external onlyManager returns (uint256 rewards) {
-        (, rewards) = FURNACE.getUserInfo(address(this));
-        if (rewards > 0) {
+    /// @notice Claims all realised CVX from Furnace
+    /// @return _rewards The amount of rewards claimed
+    function claim() external onlyManager returns (uint256 _rewards) {
+        (, _rewards) = FURNACE.getUserInfo(address(this));
+        if (_rewards > 0) {
             FURNACE.claim(manager);
         }
     }
@@ -157,12 +188,12 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         unlockObligations += _assets;
         UnlockRequest[] storage unlocks = requestedUnlocks[_receiver].unlocks;
 
-        (ICLeverLocker.EpochUnlockInfo[] memory locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
+        (ICLeverLocker.EpochUnlockInfo[] memory _locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
 
-        uint256 _locksLength = locks.length;
+        uint256 _locksLength = _locks.length;
         for (uint256 i; i < _locksLength; i++) { // @todo - gas optimization ++i
-            uint256 _availableToUnlock = locks[i].pendingUnlock;
-            uint64 _epoch = locks[i].unlockEpoch;
+            uint256 _availableToUnlock = _locks[i].pendingUnlock;
+            uint64 _epoch = _locks[i].unlockEpoch;
 
             if (_currentUnlockObligations != 0) {
                 if (_currentUnlockObligations < _availableToUnlock) {
@@ -186,44 +217,37 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     }
 
     /// @notice Withdraws CVX that became unlocked by the current epoch.
-    ///         The unlock must be requested prior by calling `requestUnlock` function
-    /// @param account The address to receive unlocked CVX
-    /// @return cvxUnlocked The amount of unlocked CVX sent to `account`
-    function withdrawUnlocked(address account) external onlyManager unlockNotInProgress returns (uint256 cvxUnlocked) {
-        uint256 currentEpoch = block.timestamp / REWARDS_DURATION;
-        UnlockRequest[] storage unlocks = requestedUnlocks[account].unlocks;
-        uint256 nextUnlockIndex = requestedUnlocks[account].nextUnlockIndex;
-        uint256 unlocksLength = unlocks.length;
+    /// @dev The unlock must be requested prior by calling `requestUnlock` function
+    /// @param _account The address to receive unlocked CVX
+    /// @return _cvxUnlocked The amount of unlocked CVX sent to `_account`
+    function withdrawUnlocked(address _account) external onlyManager unlockNotInProgress returns (uint256 _cvxUnlocked) {
+        uint256 _currentEpoch = block.timestamp / REWARDS_DURATION;
+        UnlockRequest[] storage unlocks = requestedUnlocks[_account].unlocks;
+        uint256 _nextUnlockIndex = requestedUnlocks[_account].nextUnlockIndex;
+        uint256 _unlocksLength = unlocks.length;
 
-        for (; nextUnlockIndex < unlocksLength; nextUnlockIndex++) {
-            uint256 unlockEpoch = unlocks[nextUnlockIndex].unlockEpoch;
-            if (unlockEpoch <= currentEpoch) {
-                uint256 unlockAmount = unlocks[nextUnlockIndex].unlockAmount;
-                delete unlocks[nextUnlockIndex];
-                cvxUnlocked += unlockAmount;
+        for (; _nextUnlockIndex < _unlocksLength; _nextUnlockIndex++) {
+            uint256 unlockEpoch = unlocks[_nextUnlockIndex].unlockEpoch;
+            if (unlockEpoch <= _currentEpoch) {
+                uint256 unlockAmount = unlocks[_nextUnlockIndex].unlockAmount;
+                delete unlocks[_nextUnlockIndex];
+                _cvxUnlocked += unlockAmount;
             } else {
                 break;
             }
         }
 
-        // update the index of the next unlock since we don't resize the array to save gas
-        requestedUnlocks[account].nextUnlockIndex = nextUnlockIndex;
+        requestedUnlocks[_account].nextUnlockIndex = _nextUnlockIndex;
 
-        if (cvxUnlocked == 0) return cvxUnlocked;
+        if (_cvxUnlocked == 0) return _cvxUnlocked;
 
-        uint256 cvxAvailable = CVX.balanceOf(address(this));
-
-        if (cvxAvailable < cvxUnlocked) {
-            (,, uint256 totalUnlocked,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
-            if (totalUnlocked > 0) {
-                // Unlocks all the requested CVX for the current epoch.
-                // The remaining tokens (if any) are left in the contract
-                // to be withdrawn by other users who requested unlock in the same epoch.
+        if (CVX.balanceOf(address(this)) < _cvxUnlocked) {
+            (,, uint256 _totalUnlocked,,) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
+            if (_totalUnlocked > 0) {
                 CLEVER_CVX_LOCKER.withdrawUnlocked();
             }
         }
-
-        CVX.safeTransfer(account, cvxUnlocked);
+        CVX.safeTransfer(_account, _cvxUnlocked);
     }
 
     /// @notice Pauses deposits and withdrawals.
@@ -259,7 +283,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
             uint256 _clevCvxRequired = _repayAmount + _repayFee;
             FURNACE.withdraw(address(this), _clevCvxRequired);
 
-            // The repayment will actually pull _clevCvxRequired amount
+            // dev: The repayment will actually pull _clevCvxRequired amount
             CLEVER_CVX_LOCKER.repay(
                 0, // cvxAmount
                 _repayAmount // clevCvxAmount
@@ -282,19 +306,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     }
 
     // ============================================================================================
-    // Owner functions
-    // ============================================================================================
-
-    function setOperator(address _operator) external onlyOwner {
-        if (_operator == address(0)) revert InvalidAddress();
-
-        operator = _operator;
-        emit OperatorSet(_operator);
-    }
-
-    function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
-
-    // ============================================================================================
     // Private view functions
     // ============================================================================================
 
@@ -309,7 +320,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
 
         if (_totalBorrowed > _maxBorrowAfterUnlock) {
             _repayAmount = _totalBorrowed - _maxBorrowAfterUnlock;
-            _repayFee = _unlockObligations * CLEVER_CVX_LOCKER.repayFeePercentage() / CLEVER_PRECISION;
+            _repayFee = _repayAmount * CLEVER_CVX_LOCKER.repayFeePercentage() / CLEVER_PRECISION;
         }
     }
 

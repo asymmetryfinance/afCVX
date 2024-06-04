@@ -34,7 +34,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     uint64 public withdrawalLimitNextUpdate;
     uint16 public weeklyWithdrawalShareBps;
 
-    uint256 private constant BASIS_POINT_SCALE = 10_000;
+    uint256 private constant PRECISION = 10_000;
 
     IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     IERC20 private constant CVXCRV = IERC20(0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7);
@@ -60,7 +60,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @dev Staked CVX share is automatically `100% - clevStrategyShareBps`
     /// @param _bps New share CLever strategy basis points
     function setCleverCvxStrategyShare(uint16 _bps) external onlyOwner {
-        if (_bps > BASIS_POINT_SCALE) revert InvalidShare();
+        if (_bps > PRECISION) revert InvalidShare();
 
         cleverStrategyShareBps = _bps;
         emit CleverCvxStrategyShareSet(_bps);
@@ -69,7 +69,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @notice Sets the protocol performance fee
     /// @param _bps New fee basis points
     function setProtocolFee(uint16 _bps) external onlyOwner {
-        if (_bps > BASIS_POINT_SCALE) revert InvalidFee();
+        if (_bps > PRECISION) revert InvalidFee();
 
         protocolFeeBps = _bps;
         emit ProtocolFeeSet(_bps);
@@ -78,7 +78,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @notice Sets the withdrawal fee
     /// @param _bps New withdrawal fee basis points
     function setWithdrawalFee(uint16 _bps) external onlyOwner {
-        if (_bps > BASIS_POINT_SCALE) revert InvalidFee();
+        if (_bps > PRECISION) revert InvalidFee();
 
         withdrawalFeeBps = _bps;
         emit WithdrawalFeeSet(_bps);
@@ -87,7 +87,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @notice Sets the share of the protocol TVL that can be withdrawn in a week
     /// @param _bps New weekly withdraw share basis points
     function setWeeklyWithdrawShare(uint16 _bps) external onlyOwner {
-        if (_bps > BASIS_POINT_SCALE) revert InvalidShare();
+        if (_bps > PRECISION) revert InvalidShare();
 
         weeklyWithdrawalShareBps = _bps;
         emit WeeklyWithdrawShareSet(_bps);
@@ -147,13 +147,13 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     }
 
     /// @inheritdoc ERC4626Upgradeable
-    function maxDeposit(address _receiver) public view override returns (uint256) {
-        return paused ? 0 : super.maxDeposit(_receiver);
+    function maxDeposit(address) public view override returns (uint256) {
+        return paused ? 0 : type(uint256).max;
     }
 
     /// @inheritdoc ERC4626Upgradeable
-    function maxMint(address _receiver) public view override returns (uint256) {
-        return paused ? 0 : super.maxMint(_receiver);
+    function maxMint(address) public view override returns (uint256) {
+        return paused ? 0 : type(uint256).max;
     }
 
     /// @inheritdoc ERC4626Upgradeable
@@ -168,7 +168,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         return Math.min(
             balanceOf(owner),
             _convertToShares(
-                _availableAssets + Math.mulDiv(_availableAssets, withdrawalFeeBps, BASIS_POINT_SCALE, Math.Rounding.Ceil),
+                _availableAssets + Math.mulDiv(_availableAssets, withdrawalFeeBps, PRECISION, Math.Rounding.Ceil),
                 Math.Rounding.Floor
             )
         );
@@ -190,7 +190,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @inheritdoc ERC4626Upgradeable
     function previewWithdraw(uint256 _assets) public view override returns (uint256) {
         return _convertToShares(
-            _assets + Math.mulDiv(_assets, withdrawalFeeBps, BASIS_POINT_SCALE, Math.Rounding.Ceil),
+            _assets + Math.mulDiv(_assets, withdrawalFeeBps, PRECISION, Math.Rounding.Ceil),
             Math.Rounding.Floor
         );
     }
@@ -198,7 +198,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @inheritdoc ERC4626Upgradeable
     function previewRedeem(uint256 _shares) public view override returns (uint256) {
         uint256 _assets = _convertToAssets(_shares, Math.Rounding.Floor);
-        return _assets - Math.mulDiv(_assets, withdrawalFeeBps, BASIS_POINT_SCALE, Math.Rounding.Ceil);
+        return _assets - Math.mulDiv(_assets, withdrawalFeeBps, PRECISION, Math.Rounding.Ceil);
     }
 
     /// @inheritdoc ERC4626Upgradeable
@@ -206,7 +206,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         return
             CVX.balanceOf(address(this)) // Idle CVX
             + CVX_REWARDS_POOL.balanceOf(address(this)) // Staked CVX
-            + cleverStrategy.netAssets(); // `_depositedInLocker + _depositedInFurnace - _borrowed - unlockObligations`
+            + cleverStrategy.netAssets();
     }
 
     /// @notice Returns the maximum amount of assets that can be unlocked by the `owner`.
@@ -216,7 +216,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         return Math.min(
             balanceOf(_owner),
             _convertToShares(
-                cleverStrategy.netAssets(), // `_depositedInLocker + _depositedInFurnace - _borrowed - unlockObligations`
+                cleverStrategy.maxTotalUnlock(),
                 Math.Rounding.Floor
             )
         );
@@ -224,8 +224,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
     /// @notice Returns the amount of assets that can be unlocked by burning _shares
     function previewRequestUnlock(uint256 _shares) public view returns (uint256) {
-        uint256 _assets = _convertToAssets(_shares, Math.Rounding.Floor);
-        return _assets - cleverStrategy.repaymentFee(_assets);
+        return _convertToAssets(_shares, Math.Rounding.Floor);
     }
 
     // ============================================================================================
@@ -245,9 +244,6 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
         _assets = previewRequestUnlock(_shares);
 
-        uint256 _maxAssets = cleverStrategy.maxTotalUnlock();
-        if (_assets > _maxAssets) revert ExceededMaxUnlock(_owner, _assets, _maxAssets); // dev: sanity check
-
         if (msg.sender != _owner) _spendAllowance(_owner, msg.sender, _shares);
 
         _burn(_owner, _shares);
@@ -257,12 +253,12 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     }
 
     /// @notice Withdraws assets requested earlier by calling `requestUnlock`.
-    /// @param receiver The address to receive the assets.
-    function withdrawUnlocked(address receiver) external {
+    /// @param _receiver The address to receive the assets.
+    function withdrawUnlocked(address _receiver) external returns (uint256 _assets) {
         if (paused) revert Paused();
 
-        uint256 cvxUnlocked = cleverStrategy.withdrawUnlocked(receiver);
-        emit UnlockedWithdrawn(msg.sender, receiver, cvxUnlocked);
+        _assets = cleverStrategy.withdrawUnlocked(_receiver);
+        emit UnlockedWithdrawn(msg.sender, _receiver, _assets);
     }
 
     // ============================================================================================
@@ -271,6 +267,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
     // @todo - can combine with harvest?
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
+    /// @dev If `_swap` is true, must call through a private RPC to avoid getting sandwiched
     function distribute(bool _swap, uint256 _minAmountOut) external {
         if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
         if (paused) revert Paused();
@@ -304,7 +301,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         _rewards = _convexRewards + _cleverRewards;
 
         if (_rewards != 0) {
-            uint256 _fee = _rewards * protocolFeeBps / BASIS_POINT_SCALE;
+            uint256 _fee = _rewards * protocolFeeBps / PRECISION;
             _rewards -= _fee;
             CVX.safeTransfer(protocolFeeCollector, _fee);
             emit Harvested(_cleverRewards, _convexRewards);
@@ -325,12 +322,12 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (_totalDeposit == 0) return (0, 0);
 
         uint256 _assetsInConvex = CVX_REWARDS_POOL.balanceOf(address(this));
-        uint256 _assetsInCLever = cleverStrategy.netAssets(); // dev: `_deposited + _depositedInFurnace - _borrowed - unlockObligations`
+        uint256 _assetsInCLever = cleverStrategy.netAssets();
 
         uint256 _totalAssets = totalAssets();
         uint256 _cleverStrategyShareBps = cleverStrategyShareBps;
-        uint256 _targetAssetsInCLever = _totalAssets * _cleverStrategyShareBps / BASIS_POINT_SCALE;
-        uint256 _targetAssetsInConvex = _totalAssets * (BASIS_POINT_SCALE - _cleverStrategyShareBps) / BASIS_POINT_SCALE;
+        uint256 _targetAssetsInCLever = _totalAssets * _cleverStrategyShareBps / PRECISION;
+        uint256 _targetAssetsInConvex = _totalAssets * (PRECISION - _cleverStrategyShareBps) / PRECISION;
 
         uint256 _requiredCLeverDeposit = _targetAssetsInCLever > _assetsInCLever ? _targetAssetsInCLever - _assetsInCLever : 0;
         uint256 _requiredConvexDeposit = _targetAssetsInConvex > _assetsInConvex ? _targetAssetsInConvex - _assetsInConvex : 0;
@@ -344,8 +341,8 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
             // Adjust any remaining amount to ensure all assets are deposited
             uint256 _remainingDeposit = _totalDeposit - _totalRequiredDeposit;
             if (_remainingDeposit > 0) {
-                _cleverDeposit += _remainingDeposit * cleverStrategyShareBps / BASIS_POINT_SCALE;
-                _convexDeposit += _remainingDeposit * (BASIS_POINT_SCALE - cleverStrategyShareBps) / BASIS_POINT_SCALE;
+                _cleverDeposit += _remainingDeposit * cleverStrategyShareBps / PRECISION;
+                _convexDeposit += _remainingDeposit * (PRECISION - cleverStrategyShareBps) / PRECISION;
             }
         } else {
             // Proportionally adjust deposits to fit the _totalDeposit
@@ -362,7 +359,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     function _updateWeeklyWithdrawalLimit() private {
         if (block.timestamp < withdrawalLimitNextUpdate) return;
 
-        uint128 _withdrawalLimit = uint128(totalAssets() * weeklyWithdrawalShareBps / BASIS_POINT_SCALE);
+        uint128 _withdrawalLimit = uint128(totalAssets() * weeklyWithdrawalShareBps / PRECISION);
         uint64 _nextUpdate = uint64(block.timestamp + 7 days);
 
         weeklyWithdrawalLimit = _withdrawalLimit;
