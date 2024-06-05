@@ -3,7 +3,7 @@ pragma solidity 0.8.25;
 
 import { Proxy } from "@openzeppelin/contracts/proxy/Proxy.sol";
 import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import { IProxySource } from "../interfaces/IProxySource.sol";
+import { IProxySource } from "./interfaces/IProxySource.sol";
 
 /// @author philogy <https://github.com/philogy>
 /// @dev ERC1967 Proxy that has no initcall or implementation factor in its deploy bytecode.

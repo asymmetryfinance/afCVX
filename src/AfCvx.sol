@@ -9,7 +9,7 @@ import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {ICleverStrategy} from "./interfaces/asymmetry/ICleverStrategy.sol";
+import {ICLeverStrategy} from "./interfaces/asymmetry/ICLeverStrategy.sol";
 import {IConvexRewardsPool} from "./interfaces/convex/IConvexRewardsPool.sol";
 
 import {TrackedAllowances} from "./utils/TrackedAllowances.sol";
@@ -39,7 +39,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     IERC20 private constant CVXCRV = IERC20(0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7);
 
-    ICleverStrategy public immutable cleverStrategy;
+    ICLeverStrategy public immutable cleverStrategy;
 
     IConvexRewardsPool private constant CVX_REWARDS_POOL = IConvexRewardsPool(0xCF50b810E57Ac33B91dCF525C6ddd9881B139332);
 
@@ -49,7 +49,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
     constructor(address _strategy) {
         _disableInitializers();
-        cleverStrategy = ICleverStrategy(_strategy);
+        cleverStrategy = ICLeverStrategy(_strategy);
     }
 
     // ============================================================================================
@@ -197,7 +197,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         return
             CVX.balanceOf(address(this)) // Idle CVX
             + CVX_REWARDS_POOL.balanceOf(address(this)) // Staked CVX
-            + cleverStrategy.netAssets();
+            + cleverStrategy.netAssets(protocolFeeBps);
     }
 
     /// @notice Returns the maximum amount of assets that can be unlocked by the `owner`.
@@ -256,9 +256,8 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     // Operator functions
     // ============================================================================================
 
-    // @todo - can combine with harvest?
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
-    /// @dev If `_swap` is true, must call through a private RPC to avoid getting sandwiched
+    /// @dev If `_swap` is true, must call through a private RPC to avoid getting sandwiched, as totalAssets will spike
     function distribute(bool _swap, uint256 _minAmountOut) external {
         if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
         if (paused) revert Paused();
@@ -271,7 +270,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     }
 
     /// @notice Harvest pending rewards from Convex and Furnace and update the weekly withdraw amount
-    /// @dev Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards.
+    /// @dev Keeps harvested rewards in the contract. Call `distribute` to redeposit rewards
     /// @param _minAmountOut Minimum amount of CVX to receive from swapping cvxCRV
     /// @return _rewards The total amount of rewards harvested, minus the protocol fee
     function harvest(uint256 _minAmountOut) external returns (uint256 _rewards) {
@@ -313,7 +312,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (_totalDeposit == 0) return (0, 0);
 
         uint256 _assetsInConvex = CVX_REWARDS_POOL.balanceOf(address(this));
-        uint256 _assetsInCLever = cleverStrategy.netAssets();
+        uint256 _assetsInCLever = cleverStrategy.netAssets(protocolFeeBps);
 
         uint256 _totalAssets = totalAssets();
         uint256 _cleverStrategyShareBps = cleverStrategyShareBps;

@@ -76,7 +76,7 @@ contract HarvestTests is Base {
         AFCVX_PROXY.distribute(false, 0);
 
         assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistribute: E2");
-        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(), AFCVX_PROXY.totalAssets() * 80 / 100, "testDistribute: E3");
+        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), AFCVX_PROXY.totalAssets() * 80 / 100, "testDistribute: E3");
         assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, "testDistribute: E4");
         assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testDistribute: E5");
 
@@ -88,7 +88,7 @@ contract HarvestTests is Base {
         testDistribute();
 
         uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
-        uint256 _cleverStrategyAssetsBefore = CLEVERCVXSTRATEGY_PROXY.netAssets();
+        uint256 _cleverStrategyAssetsBefore = CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps());
 
         (uint256 _depositedBefore, , , uint256 _borrowedBefore, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         uint256 _borrowingCapacityBefore = 1e2 - (_borrowedBefore * 1e2 / _depositedBefore);
@@ -99,10 +99,10 @@ contract HarvestTests is Base {
         vm.prank(owner);
         CLEVERCVXSTRATEGY_PROXY.borrow();
 
-        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(), AFCVX_PROXY.totalAssets() * 80 / 100, "testBorrow: E0");
+        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), AFCVX_PROXY.totalAssets() * 80 / 100, "testBorrow: E0");
         assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, "testBorrow: E1");
         assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testBorrow: E2");
-        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(), _cleverStrategyAssetsBefore, "testBorrow: E3");
+        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), _cleverStrategyAssetsBefore, "testBorrow: E3");
 
         (uint256 _depositedAfter, , , uint256 _borrowedAfter, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         assertTrue(_borrowingCapacityBefore < 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testBorrow: E4");
@@ -123,7 +123,7 @@ contract HarvestTests is Base {
         AFCVX_PROXY.distribute(true, 0);
 
         assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistributeSwap: E2");
-        assertTrue(CLEVERCVXSTRATEGY_PROXY.netAssets() > AFCVX_PROXY.totalAssets() * 80 / 100, "testDistributeSwap: E3");
+        assertTrue(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()) > AFCVX_PROXY.totalAssets() * 80 / 100, "testDistributeSwap: E3");
         assertTrue(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)) < AFCVX_PROXY.totalAssets() * 20 / 100, "testDistributeSwap: E4");
         assertTrue(AFCVX_PROXY.totalAssets() > _totalAssetsBefore, "testDistributeSwap: E5"); // dev: getting more clevcvx than cvx we had before
 

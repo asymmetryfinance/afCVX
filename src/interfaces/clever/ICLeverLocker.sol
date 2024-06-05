@@ -4,9 +4,7 @@ pragma solidity 0.8.25;
 interface ICLeverLocker {
 
     struct EpochUnlockInfo {
-        // The number of CVX should unlocked at the start of epoch `unlockEpoch`.
         uint192 pendingUnlock;
-        // The epoch number to unlock `pendingUnlock` CVX
         uint64 unlockEpoch;
     }
 

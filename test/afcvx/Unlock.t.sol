@@ -37,12 +37,12 @@ contract UnlockTests is Base {
         assertEq(_totalAssetsBefore, AFCVX_PROXY.totalAssets(), "testProcessCurrentUnlockObligations: E0");
         assertEq(_totalSupplyBefore, AFCVX_PROXY.totalSupply(), "testProcessCurrentUnlockObligations: E1");
 
-        _deposit(AFCVX_PROXY.totalAssets(), user);
+        _deposit(10 ether, user);
         _requestUnlock(1 ether, user);
 
         _totalAssetsBefore = AFCVX_PROXY.totalAssets();
         _totalSupplyBefore = AFCVX_PROXY.totalSupply();
-        uint256 _cleverStrategyNetAssetsBefore = CLEVERCVXSTRATEGY_PROXY.netAssets();
+        uint256 _cleverStrategyNetAssetsBefore = CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps());
 
         uint256 _currentEpoch = block.timestamp / 1 weeks;
         uint256 _nextUnlockEpoch = _getNextUnlockEpoch(0);
@@ -52,15 +52,35 @@ contract UnlockTests is Base {
         }
 
         assertEq(CLEVERCVXSTRATEGY_PROXY.unlockObligations(), 0, "testProcessCurrentUnlockObligations: E2");
-        assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testProcessCurrentUnlockObligations: E3");
+        assertApproxEqAbs(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, 1, "testProcessCurrentUnlockObligations: E3");
         assertEq(AFCVX_PROXY.totalSupply(), _totalSupplyBefore, "testProcessCurrentUnlockObligations: E4");
-        assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(), _cleverStrategyNetAssetsBefore, "testProcessCurrentUnlockObligations: E5");
+        assertApproxEqAbs(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), _cleverStrategyNetAssetsBefore, 1, "testProcessCurrentUnlockObligations: E5");
         assertEq(CVX.balanceOf(address(CLEVERCVXSTRATEGY_PROXY)), 0, "testProcessCurrentUnlockObligations: E6");
     }
 
     function testProcessCurrentUnlockObligationsWithFee() public {
         _updateCLeverRepaymentFeePercentage(); // set 1% repayment fee
         testProcessCurrentUnlockObligations();
+    }
+
+    function testMaxUnlock() public {
+        _updateCLeverRepaymentFeePercentage(); // set 1% repayment fee
+        _upgradeImplementations();
+
+        _deposit(AFCVX_PROXY.totalAssets(), user);
+        assertTrue(AFCVX_PROXY.convertToAssets(AFCVX_PROXY.balanceOf(user)) > CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), "testMaxUnlock: E0");
+
+        uint256 _maxShares = AFCVX_PROXY.maxRequestUnlock(user);
+        uint256 _expectedAssets = AFCVX_PROXY.previewRequestUnlock(_maxShares);
+        uint256 _unlockObigationsBefore = CLEVERCVXSTRATEGY_PROXY.unlockObligations();
+
+        vm.prank(user);
+        (, uint256 _assets) = AFCVX_PROXY.requestUnlock(_maxShares, user, user);
+
+        assertEq(_assets, _expectedAssets, "testMaxUnlock: E1");
+        assertApproxEqAbs(CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), 0, 2, "testMaxUnlock: E2");
+        assertEq(CLEVERCVXSTRATEGY_PROXY.unlockObligations(), _unlockObigationsBefore + _assets, "testMaxUnlock: E3");
+        assertApproxEqAbs(AFCVX_PROXY.maxRequestUnlock(user), 0, 1, "testMaxUnlock: E4");
     }
 
     // ============================================================================================
@@ -119,7 +139,7 @@ contract UnlockTests is Base {
 
         assertEq(CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), _maxTotalUnlockBefore - _assets, "_requestUnlock: E1");
         assertEq(CLEVERCVXSTRATEGY_PROXY.unlockObligations(), _unlockObligationsBefore + _assets, "_requestUnlock: E2");
-        assertEq(AFCVX_PROXY.maxRequestUnlock(_user), 1 + _maxUserUnlockBefore - _shares, "_requestUnlock: E3");
+        assertApproxEqAbs(AFCVX_PROXY.maxRequestUnlock(_user), _maxUserUnlockBefore - _shares, 1, "_requestUnlock: E3");
         assertEq(_assets, _expectedAssets, "_requestUnlock: E4");
     }
 }

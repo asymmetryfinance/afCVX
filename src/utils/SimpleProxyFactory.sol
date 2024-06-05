@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import { IProxySource } from "../interfaces/IProxySource.sol";
+import { IProxySource } from "./interfaces/IProxySource.sol";
 import { SimpleProxy } from "./SimpleProxy.sol";
 
 /// @author philogy <https://github.com/philogy>

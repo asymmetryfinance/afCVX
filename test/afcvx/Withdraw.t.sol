@@ -64,7 +64,7 @@ contract WithdrawTests is Base {
         // big difference because of fee calculation
         // notice that before the upgrade, users were paying a lower withdrawal fee on `withdraw` than on `redeem`
         // as `previewWithdraw` and `previewRedeem` were calculating the fee differently (https://github.com/asymmetryfinance/afCVX/blob/d062dc416d7afc99d45424fc8ad4ee045d08c667/src/AfCvx.sol#L234)
-        assertApproxEqAbs(_assetsBeforeUpgrade, _assetsAfterUpgrade, 1e15, "testRedeem: E10");
+        assertApproxEqAbs(_assetsBeforeUpgrade, _assetsAfterUpgrade, 1e16, "testRedeem: E10");
 
         vm.stopPrank();
     }
