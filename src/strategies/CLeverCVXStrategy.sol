@@ -250,14 +250,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         CVX.safeTransfer(_account, _cvxUnlocked);
     }
 
-    /// @notice Pauses deposits and withdrawals.
-    /// @dev Called in emergencies to stop all calls and transfers until further notice.
-    function emergencyShutdown() external onlyManager {
-        paused = true;
-        _emergencyRevokeAllAllowances();
-        emit EmergencyShutdown();
-    }
-
     // ============================================================================================
     // Operator functions
     // ============================================================================================

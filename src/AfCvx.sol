@@ -125,15 +125,6 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (!_sent) revert SweepFailed(_data);
     }
 
-    /// @notice Pauses the contract and revokes all allowances
-    /// @dev Can be used on a melicious upgrade to one of the dependencies
-    function emergencyShutdown() external onlyOwner {
-        paused = true;
-        cleverStrategy.emergencyShutdown();
-        _emergencyRevokeAllAllowances();
-        emit EmergencyShutdown();
-    }
-
     /// @dev Allows the owner of the contract to upgrade to *any* new address
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
 

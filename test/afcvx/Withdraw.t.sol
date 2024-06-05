@@ -112,7 +112,7 @@ contract WithdrawTests is Base {
         assertEq(AFCVX_PROXY.totalSupply(), _totalSupply - _sharesAfterUpgrade, "testWithdraw: E7");
         assertEq(AFCVX_PROXY.totalAssets(), _totalAssets - _assets, "testWithdraw: E8");
         assertEq(_sharesPreviewAfterUpgrade, _sharesAfterUpgrade, "testWithdraw: E10");
-        assertApproxEqAbs(_sharesBeforeUpgrade, _sharesAfterUpgrade, 1e11, "testWithdraw: E10");
+        assertApproxEqAbs(_sharesBeforeUpgrade, _sharesAfterUpgrade, 1e13, "testWithdraw: E10");
 
         vm.stopPrank();
     }

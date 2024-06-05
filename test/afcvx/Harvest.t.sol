@@ -47,7 +47,7 @@ contract HarvestTests is Base {
         // Simulate rewards
         _simulateConvexRewards();
         _simulateFurnaceRewards();
-        skip(5 days);
+        skip(5 days + AFCVX_PROXY.withdrawalLimitNextUpdate());
 
         assertEq(_totalSupply, AFCVX_PROXY.totalSupply(), "testHarvest: E3");
         assertEq(_totalAssets, AFCVX_PROXY.totalAssets(), "testHarvest: E4");
@@ -56,9 +56,10 @@ contract HarvestTests is Base {
         _rewards = AFCVX_PROXY.harvest(0);
 
         assertTrue(_rewards > 0, "testHarvest: E5");
-        assertTrue(AFCVX_PROXY.totalAssets() > _totalAssets, "testHarvest: E6");
+        assertEq(AFCVX_PROXY.totalAssets(), _totalAssets + _rewards, "testHarvest: E6");
         assertEq(AFCVX_PROXY.totalSupply(), _totalSupply, "testHarvest: E7");
         assertEq(AFCVX_PROXY.weeklyWithdrawalLimit(), ((_totalAssets + _rewards) * AFCVX_PROXY.weeklyWithdrawalShareBps() / 10_000), "testHarvest: E8");
+        assertEq(AFCVX_PROXY.withdrawalLimitNextUpdate(), block.timestamp + 7 days, "testHarvest: E9");
     }
 
     function testDistribute() public {

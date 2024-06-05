@@ -58,14 +58,9 @@ contract UnlockTests is Base {
         assertEq(CVX.balanceOf(address(CLEVERCVXSTRATEGY_PROXY)), 0, "testProcessCurrentUnlockObligations: E6");
     }
 
-    // function testProcessCurrentUnlockObligationsWithFee() public {
-    //     _updateCLeverRepaymentFeePercentage(); // set 1% repayment fee
-    //     testProcessCurrentUnlockObligations();
-    // }
-
-    function testSanity2() public {
-        vm.prank(user);
-        CLEVER_CVX_LOCKER.withdrawUnlocked();
+    function testProcessCurrentUnlockObligationsWithFee() public {
+        _updateCLeverRepaymentFeePercentage(); // set 1% repayment fee
+        testProcessCurrentUnlockObligations();
     }
 
     // ============================================================================================
@@ -119,7 +114,7 @@ contract UnlockTests is Base {
         uint256 _expectedAssets = AFCVX_PROXY.previewRequestUnlock(_shares);
 
         vm.startPrank(_user);
-        (uint256 _unlockEpoch, uint256 _assets) = AFCVX_PROXY.requestUnlock(_shares, _user, _user);
+        (, uint256 _assets) = AFCVX_PROXY.requestUnlock(_shares, _user, _user);
         vm.stopPrank();
 
         assertEq(CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), _maxTotalUnlockBefore - _assets, "_requestUnlock: E1");
@@ -127,21 +122,4 @@ contract UnlockTests is Base {
         assertEq(AFCVX_PROXY.maxRequestUnlock(_user), 1 + _maxUserUnlockBefore - _shares, "_requestUnlock: E3");
         assertEq(_assets, _expectedAssets, "_requestUnlock: E4");
     }
-
-    // function _requestUnlockMax(address _user) internal {
-    //     assertTrue(AFCVX_PROXY.convertToAssets(AFCVX_PROXY.balanceOf(_user)) > CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), "_requestUnlockMax: E0");
-
-    //     uint256 _unlockObligationsBefore = CLEVERCVXSTRATEGY_PROXY.unlockObligations();
-    //     uint256 _maxRequestUnlockShares = AFCVX_PROXY.maxRequestUnlock(_user);
-    //     uint256 _expectedAssets = AFCVX_PROXY.previewRequestUnlock(_maxRequestUnlockShares);
-
-    //     vm.startPrank(_user);
-    //     (uint256 _unlockEpoch, uint256 _assets) = AFCVX_PROXY.requestUnlock(1 ether, _user, _user);
-    //     vm.stopPrank();
-
-    //     // assertEq(CLEVERCVXSTRATEGY_PROXY.maxTotalUnlock(), 1, "_requestUnlockMax: E1");
-    //     // assertEq(CLEVERCVXSTRATEGY_PROXY.unlockObligations(), _unlockObligationsBefore + _assets, "_requestUnlockMax: E2");
-    //     // assertEq(AFCVX_PROXY.maxRequestUnlock(_user), 0, "_requestUnlockMax: E3");
-    //     // assertEq(_assets, _expectedAssets, "_requestUnlockMax: E4");
-    // }
 }
