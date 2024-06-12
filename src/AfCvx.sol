@@ -378,11 +378,12 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (_assets != 0) {
             uint256 _idle = CVX.balanceOf(address(this));
             if (_idle < _assets) {
+                uint256 _unstakeAmount;
                 unchecked {
-                    _assets -= _idle;
+                    _unstakeAmount = _assets - _idle;
                 }
                 CVX_REWARDS_POOL.withdraw(
-                    _assets, // amount
+                    _unstakeAmount, // amount
                     false // claim
                 );
             }
