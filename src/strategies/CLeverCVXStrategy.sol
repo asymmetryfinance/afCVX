@@ -45,7 +45,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     uint256 private constant REWARDS_DURATION = 1 weeks;
 
     IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
-    IERC20 private constant CVXCRV = IERC20(0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7);
 
     IFurnace private constant FURNACE = IFurnace(0xCe4dCc5028588377E279255c0335Effe2d7aB72a);
     ICLeverLocker private constant CLEVER_CVX_LOCKER = ICLeverLocker(0x96C68D861aDa016Ed98c30C810879F9df7c64154);
@@ -333,7 +332,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     error InvalidAddress();
-    error InsufficientFurnaceBalance();
     error UnlockInProgress();
     error InvalidState();
     error MaintenanceWindow();

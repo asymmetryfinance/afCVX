@@ -419,7 +419,6 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     event ProtocolFeeCollectorSet(address indexed newProtocolFeeCollector);
     event WeeklyWithdrawShareSet(uint256 indexed newShare);
     event OperatorSet(address indexed newOperator);
-    event EmergencyShutdown();
     event Distributed(uint256 indexed cleverDepositAmount, uint256 indexed convexStakeAmount);
     event Harvested(uint256 indexed cleverRewards, uint256 indexed convexStakedRewards);
     event UnlockRequested(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares, uint256 unlockEpoch);
@@ -435,7 +434,6 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     error InvalidFee();
     error InvalidAddress();
     error DirectEthTransfer();
-    error ExceededMaxUnlock(address owner, uint256 assets, uint256 max);
     error Paused();
     error SweepFailed(bytes data);
 }
