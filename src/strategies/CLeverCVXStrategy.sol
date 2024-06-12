@@ -287,10 +287,11 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         if (_unlockObligations != 0) {
             unlockObligations = 0;
             CLEVER_CVX_LOCKER.unlock(_unlockObligations);
-
-            // The start of the next epoch. Until then unlock requests are blocked
-            maintenanceWindowEnd = block.timestamp / REWARDS_DURATION * REWARDS_DURATION + REWARDS_DURATION;
         }
+
+        // The start of the next epoch. Until then unlock requests are blocked
+        maintenanceWindowEnd = block.timestamp / REWARDS_DURATION * REWARDS_DURATION + REWARDS_DURATION;
+
         unlockInProgress = false;
     }
 
