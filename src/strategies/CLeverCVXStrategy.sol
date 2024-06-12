@@ -177,7 +177,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
 
         uint256 _currentUnlockObligations = unlockObligations;
 
-        unlockObligations += _assets;
+        unlockObligations = _currentUnlockObligations + _assets;
         UnlockRequest[] storage unlocks = requestedUnlocks[_receiver].unlocks;
 
         (ICLeverLocker.EpochUnlockInfo[] memory _locks,) = CLEVER_CVX_LOCKER.getUserLocks(address(this));
