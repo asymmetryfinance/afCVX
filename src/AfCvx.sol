@@ -316,10 +316,10 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         uint256 _assetsInConvex = CVX_REWARDS_POOL.balanceOf(address(this));
         uint256 _assetsInCLever = cleverStrategy.netAssets(protocolFeeBps);
 
-        uint256 _totalAssets = totalAssets();
+        uint256 _totalAssets = _totalDeposit + _assetsInConvex + _assetsInCLever;
         uint256 _cleverStrategyShareBps = cleverStrategyShareBps;
         uint256 _targetAssetsInCLever = _totalAssets * _cleverStrategyShareBps / PRECISION;
-        uint256 _targetAssetsInConvex = _totalAssets * (PRECISION - _cleverStrategyShareBps) / PRECISION;
+        uint256 _targetAssetsInConvex = _totalAssets - _targetAssetsInCLever;
 
         uint256 _requiredCLeverDeposit = _targetAssetsInCLever > _assetsInCLever ? _targetAssetsInCLever - _assetsInCLever : 0;
         uint256 _requiredConvexDeposit = _targetAssetsInConvex > _assetsInConvex ? _targetAssetsInConvex - _assetsInConvex : 0;
@@ -333,13 +333,14 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
             // Adjust any remaining amount to ensure all assets are deposited
             uint256 _remainingDeposit = _totalDeposit - _totalRequiredDeposit;
             if (_remainingDeposit > 0) {
-                _cleverDeposit += _remainingDeposit * cleverStrategyShareBps / PRECISION;
-                _convexDeposit += _remainingDeposit * (PRECISION - cleverStrategyShareBps) / PRECISION;
+                uint256 _cleverShare = _remainingDeposit * cleverStrategyShareBps / PRECISION;
+                _cleverDeposit += _cleverShare;
+                _convexDeposit += _remainingDeposit - _cleverShare;
             }
         } else {
             // Proportionally adjust deposits to fit the _totalDeposit
             _cleverDeposit = (_totalDeposit * _requiredCLeverDeposit) / _totalRequiredDeposit;
-            _convexDeposit = (_totalDeposit * _requiredConvexDeposit) / _totalRequiredDeposit;
+            _convexDeposit = _totalDeposit - _cleverDeposit;
         }
     }
 
