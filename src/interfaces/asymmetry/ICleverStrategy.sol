@@ -8,4 +8,5 @@ interface ICLeverStrategy {
     function claim() external returns (uint256);
     function requestUnlock(uint256 amount, address to) external returns (uint256 unlockEpoch);
     function withdrawUnlocked(address account) external returns (uint256 cvxUnlocked);
+    function setPaused(bool _paused) external;
 }

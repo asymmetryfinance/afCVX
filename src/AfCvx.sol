@@ -115,6 +115,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @param _paused New paused state
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
+        cleverStrategy.setPaused(_paused);
         emit PausedSet(_paused);
     }
 

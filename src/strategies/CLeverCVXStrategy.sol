@@ -242,6 +242,12 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         CVX.safeTransfer(_account, _assets);
     }
 
+    /// @notice Pauses the strategy
+    /// @param _paused A flag indicating whether the strategy should be paused
+    function setPaused(bool _paused) external onlyManager {
+        paused = _paused;
+    }
+
     // ============================================================================================
     // Operator functions
     // ============================================================================================
@@ -320,7 +326,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     event OperatorSet(address indexed newOperator);
-    event EmergencyShutdown();
 
     // ============================================================================================
     // Errors
