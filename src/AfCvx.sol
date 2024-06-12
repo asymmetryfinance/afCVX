@@ -189,7 +189,8 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @inheritdoc ERC4626Upgradeable
     function previewRedeem(uint256 _shares) public view override returns (uint256) {
         uint256 _assets = _convertToAssets(_shares, Math.Rounding.Floor);
-        return _assets - Math.mulDiv(_assets, withdrawalFeeBps, PRECISION, Math.Rounding.Ceil);
+        uint256 _withdrawalFeeBps = withdrawalFeeBps;
+        return _assets - Math.mulDiv(_assets, _withdrawalFeeBps, _withdrawalFeeBps + PRECISION, Math.Rounding.Ceil);
     }
 
     /// @inheritdoc ERC4626Upgradeable
