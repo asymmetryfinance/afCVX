@@ -259,13 +259,15 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     // ============================================================================================
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
-    /// @dev If `_swap` is true, must call through a private RPC to avoid getting sandwiched, as totalAssets will spike
-    function distribute(bool _swap, uint256 _minAmountOut) external {
+    /// @dev If `_swapPercentage > 0`, must call through a private RPC to avoid getting sandwiched, as totalAssets will spike
+    /// @param _swapPercentage The percentage of `_cleverDeposit` to swap to clevCVX, remaining assets will be deposited to Locker
+    /// @param _minAmountOut Minimum amount of clevCVX to receive from swapping CVX
+    function distribute(uint256 _swapPercentage, uint256 _minAmountOut) external {
         if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
         if (paused) revert Paused();
 
         (uint256 _cleverDeposit, uint256 _convexDeposit) = _calculateDistribute();
-        if (_cleverDeposit > 0) cleverStrategy.deposit(_cleverDeposit, _swap, _minAmountOut);
+        if (_cleverDeposit > 0) cleverStrategy.deposit(_cleverDeposit, _swapPercentage, _minAmountOut);
         if (_convexDeposit > 0) CVX_REWARDS_POOL.stake(_convexDeposit);
 
         emit Distributed(_cleverDeposit, _convexDeposit);
@@ -333,7 +335,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
             // Adjust any remaining amount to ensure all assets are deposited
             uint256 _remainingDeposit = _totalDeposit - _totalRequiredDeposit;
             if (_remainingDeposit > 0) {
-                uint256 _cleverShare = _remainingDeposit * cleverStrategyShareBps / PRECISION;
+                uint256 _cleverShare = _remainingDeposit * _cleverStrategyShareBps / PRECISION;
                 _cleverDeposit += _cleverShare;
                 _convexDeposit += _remainingDeposit - _cleverShare;
             }

@@ -16,8 +16,9 @@ contract UnlockTests is Base {
 
         // from utils/fetch_events.py
         unlockers = [
-            0x4f9ccE86D68Ee24275B9A2EDfC4eF52bd5e5b87c,
             0xc42cEb990DeB305520C4527F2a841506095A55D6,
+            0x4f9ccE86D68Ee24275B9A2EDfC4eF52bd5e5b87c,
+            0x32EAE26eCfd9eDb636524182E033E58b301D4638,
             0x82a3b3274949C050952f8F826B099525f3A4572F,
             0x76a1F47f8d998D07a15189a07d9aADA180E09aC6,
             user

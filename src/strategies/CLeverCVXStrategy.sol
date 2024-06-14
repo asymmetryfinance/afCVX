@@ -147,16 +147,28 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
 
     /// @notice Deposits assets to the strategy
     /// @param _assets The amount of assets to deposit
-    /// @param _swap A flag indicating whether CVX should be swapped for clevCVX or deposited to Clever
+    /// @param _swapPercentage The percentage of assets to swap to clevCVX, remaining assets will be deposited to Locker
     /// @param _minAmountOut The minimum amount of clevCVX to receive after the swap. Only used if `swap` is true
-    function deposit(uint256 _assets, bool _swap, uint256 _minAmountOut) external onlyManager unlockNotInProgress {
+    function deposit(
+        uint256 _assets,
+        uint256 _swapPercentage,
+        uint256 _minAmountOut
+    ) external onlyManager unlockNotInProgress {
+        if (_swapPercentage > PRECISION) revert InvalidSwapPercentage();
+
         CVX.safeTransferFrom(msg.sender, address(this), _assets);
-        if (_swap) {
-            uint256 clevCvxAmount = Zap.swapCvxToClevCvx(_assets, _minAmountOut);
-            FURNACE.deposit(clevCvxAmount);
-        } else {
-            CLEVER_CVX_LOCKER.deposit(_assets);
+
+        uint256 _swapAmount;
+        uint256 _lockerAmount = _assets;
+        if (_swapPercentage > 0) {
+            _swapAmount = _assets * _swapPercentage / PRECISION;
+            _lockerAmount = _assets - _swapAmount;
         }
+
+        if (_swapAmount > 0) FURNACE.deposit(Zap.swapCvxToClevCvx(_swapAmount, _minAmountOut));
+        if (_lockerAmount > 0) CLEVER_CVX_LOCKER.deposit(_lockerAmount);
+
+        emit Deposited(_assets, _swapAmount, _lockerAmount);
     }
 
     /// @notice Claims all realised CVX from Furnace
@@ -326,6 +338,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     event OperatorSet(address indexed newOperator);
+    event Deposited(uint256 amount, uint256 swapAmount, uint256 lockerAmount);
 
     // ============================================================================================
     // Errors
@@ -336,4 +349,5 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     error InvalidState();
     error MaintenanceWindow();
     error Paused();
+    error InvalidSwapPercentage();
 }

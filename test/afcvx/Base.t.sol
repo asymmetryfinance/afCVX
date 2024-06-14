@@ -32,13 +32,18 @@ abstract contract Base is Test {
 
     IConvexRewardsPool public constant CVX_REWARDS_POOL = IConvexRewardsPool(0xCF50b810E57Ac33B91dCF525C6ddd9881B139332);
 
+    uint256 public constant PRECISION = 10_000;
+
     // ============================================================================================
     // Setup
     // ============================================================================================
 
     function setUp() public virtual {
 
-        vm.selectFork(vm.createFork(vm.envString("ETHEREUM_RPC_URL")));
+        vm.createSelectFork(
+            vm.envString("ETHEREUM_RPC_URL"), // rpc url
+            20089906 // fork block number
+        );
 
         // Create user
         user = _createUser("user");

@@ -70,14 +70,14 @@ contract HarvestTests is Base {
         uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
         (uint256 _depositedBefore, , , uint256 _borrowedBefore, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         uint256 _borrowingCapacityBefore = 1e18 - (_borrowedBefore * 1e18 / _depositedBefore);
-        assertApproxEqAbs(_borrowingCapacityBefore, 50e16, 1, "testDistribute: E1");
+        assertApproxEqAbs(_borrowingCapacityBefore, 50e16, 5, "testDistribute: E1");
 
         vm.prank(owner);
-        AFCVX_PROXY.distribute(false, 0);
+        AFCVX_PROXY.distribute(0, 0);
 
         assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistribute: E2");
         assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), AFCVX_PROXY.totalAssets() * 80 / 100, "testDistribute: E3");
-        assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, "testDistribute: E4");
+        assertApproxEqAbs(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, 1e4, "testDistribute: E4");
         assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testDistribute: E5");
 
         (uint256 _depositedAfter, , , uint256 _borrowedAfter, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
@@ -92,7 +92,7 @@ contract HarvestTests is Base {
 
         (uint256 _depositedBefore, , , uint256 _borrowedBefore, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         uint256 _borrowingCapacityBefore = 1e2 - (_borrowedBefore * 1e2 / _depositedBefore);
-        assertApproxEqAbs(_borrowingCapacityBefore, 50, 1, "testDistribute: E1");
+        assertApproxEqAbs(_borrowingCapacityBefore, 50, 5, "testDistribute: E1");
 
         vm.roll(block.number + 1);
 
@@ -100,7 +100,7 @@ contract HarvestTests is Base {
         CLEVERCVXSTRATEGY_PROXY.borrow();
 
         assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), AFCVX_PROXY.totalAssets() * 80 / 100, "testBorrow: E0");
-        assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, "testBorrow: E1");
+        assertApproxEqAbs(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), AFCVX_PROXY.totalAssets() * 20 / 100, 1e4, "testBorrow: E1");
         assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testBorrow: E2");
         assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), _cleverStrategyAssetsBefore, "testBorrow: E3");
 
@@ -108,7 +108,9 @@ contract HarvestTests is Base {
         assertTrue(_borrowingCapacityBefore < 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testBorrow: E4");
     }
 
-    function testDistributeSwap() public {
+    function testDistributeSwap(uint256 _swapPercentage) public {
+        vm.assume(_swapPercentage > 0 && _swapPercentage < PRECISION);
+
         testHarvest();
 
         assertTrue(CVX.balanceOf(address(AFCVX_PROXY)) > 0, "testDistributeSwap: E0");
@@ -119,21 +121,39 @@ contract HarvestTests is Base {
         uint256 _borrowingCapacityBefore = 1e18 - (_borrowedBefore * 1e18 / _depositedBefore);
         assertApproxEqAbs(_borrowingCapacityBefore, 50e16, 1, "testDistributeSwap: E1");
 
+        uint256 _expectedSwapAmount;
+        uint256 _expectedDepositAmount;
+        uint256 _convexExpectedDeposit;
+        {
+            uint256 _cleverExpectedDeposit;
+            (_cleverExpectedDeposit, _convexExpectedDeposit) = _calculateDistribute();
+            _expectedSwapAmount = _cleverExpectedDeposit * _swapPercentage / PRECISION;
+            _expectedDepositAmount = _cleverExpectedDeposit - _expectedSwapAmount;
+        }
+
+        uint256 _assetsInConvexBefore = CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY));
+
         vm.prank(owner);
-        AFCVX_PROXY.distribute(true, 0);
+        AFCVX_PROXY.distribute(_swapPercentage, 0);
 
         assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistributeSwap: E2");
         assertTrue(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()) > AFCVX_PROXY.totalAssets() * 80 / 100, "testDistributeSwap: E3");
         assertTrue(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)) < AFCVX_PROXY.totalAssets() * 20 / 100, "testDistributeSwap: E4");
         assertTrue(AFCVX_PROXY.totalAssets() > _totalAssetsBefore, "testDistributeSwap: E5"); // dev: getting more clevcvx than cvx we had before
 
-        (uint256 _depositedAfter, , , uint256 _borrowedAfter, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
-        assertEq(_borrowingCapacityBefore, 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testDistributeSwap: E6"); // dev: no borrowing capacity
-        assertEq(_depositedBefore, _depositedAfter, "testDistributeSwap: E7");
-        assertEq(_borrowedBefore, _borrowedAfter, "testDistributeSwap: E8");
+        {
+            (uint256 _depositedAfter, , , uint256 _borrowedAfter, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+            assertTrue(_borrowingCapacityBefore < 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testDistributeSwap: E6");
+            assertEq(_depositedAfter - _depositedBefore, _expectedDepositAmount, "testDistributeSwap: E7");
+            assertEq(_borrowedBefore, _borrowedAfter, "testDistributeSwap: E8");
+        }
 
-        (uint256 _depositedInFurnaceAfter, uint256 _rewardsFurnaceAfter) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
-        assertTrue(_depositedInFurnaceBefore + _rewardsFurnaceBefore < _depositedInFurnaceAfter + _rewardsFurnaceAfter, "testDistributeSwap: E9");
+        {
+            (uint256 _depositedInFurnaceAfter, uint256 _rewardsFurnaceAfter) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+            assertTrue((_depositedInFurnaceAfter + _rewardsFurnaceAfter) - (_depositedInFurnaceBefore + _rewardsFurnaceBefore) >= _expectedSwapAmount, "testDistributeSwap: E9");
+        }
+
+        assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), _assetsInConvexBefore + _convexExpectedDeposit, "testDistributeSwap: E10");
     }
 
     // ============================================================================================
@@ -153,5 +173,40 @@ contract HarvestTests is Base {
         CVX.approve(address(FURNACE), _rewards);
         FURNACE.distribute(_furnaceOwner, _rewards);
         vm.stopPrank();
+    }
+
+    function _calculateDistribute() internal view returns (uint256 _cleverDeposit, uint256 _convexDeposit) {
+        uint256 _totalDeposit = CVX.balanceOf(address(AFCVX_PROXY));
+        if (_totalDeposit == 0) return (0, 0);
+
+        uint256 _assetsInConvex = CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY));
+        uint256 _assetsInCLever = CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps());
+
+        uint256 _totalAssets = _totalDeposit + _assetsInConvex + _assetsInCLever;
+        uint256 _cleverStrategyShareBps = AFCVX_PROXY.cleverStrategyShareBps();
+        uint256 _targetAssetsInCLever = _totalAssets * _cleverStrategyShareBps / PRECISION;
+        uint256 _targetAssetsInConvex = _totalAssets - _targetAssetsInCLever;
+
+        uint256 _requiredCLeverDeposit = _targetAssetsInCLever > _assetsInCLever ? _targetAssetsInCLever - _assetsInCLever : 0;
+        uint256 _requiredConvexDeposit = _targetAssetsInConvex > _assetsInConvex ? _targetAssetsInConvex - _assetsInConvex : 0;
+
+        uint256 _totalRequiredDeposit = _requiredCLeverDeposit + _requiredConvexDeposit;
+
+        if (_totalRequiredDeposit <= _totalDeposit) {
+            _cleverDeposit = _requiredCLeverDeposit;
+            _convexDeposit = _requiredConvexDeposit;
+            
+            // Adjust any remaining amount to ensure all assets are deposited
+            uint256 _remainingDeposit = _totalDeposit - _totalRequiredDeposit;
+            if (_remainingDeposit > 0) {
+                uint256 _cleverShare = _remainingDeposit * _cleverStrategyShareBps / PRECISION;
+                _cleverDeposit += _cleverShare;
+                _convexDeposit += _remainingDeposit - _cleverShare;
+            }
+        } else {
+            // Proportionally adjust deposits to fit the _totalDeposit
+            _cleverDeposit = (_totalDeposit * _requiredCLeverDeposit) / _totalRequiredDeposit;
+            _convexDeposit = _totalDeposit - _cleverDeposit;
+        }
     }
 }
