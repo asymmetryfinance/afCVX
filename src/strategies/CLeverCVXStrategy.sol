@@ -175,9 +175,8 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     /// @return _rewards The amount of rewards claimed
     function claim() external onlyManager returns (uint256 _rewards) {
         (, _rewards) = FURNACE.getUserInfo(address(this));
-        if (_rewards > 0) {
+        if (_rewards > 0)
             FURNACE.claim(manager);
-        }
     }
 
     /// @notice Requests to unlock assets

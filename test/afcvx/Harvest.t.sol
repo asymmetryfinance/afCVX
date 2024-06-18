@@ -73,7 +73,7 @@ contract HarvestTests is Base {
         assertApproxEqAbs(_borrowingCapacityBefore, 50e16, 5, "testDistribute: E1");
 
         vm.prank(owner);
-        AFCVX_PROXY.distribute(0, 0);
+        AFCVX_PROXY.distribute(type(uint256).max, 0, 0);
 
         assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistribute: E2");
         assertEq(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()), AFCVX_PROXY.totalAssets() * 80 / 100, "testDistribute: E3");
@@ -108,12 +108,13 @@ contract HarvestTests is Base {
         assertTrue(_borrowingCapacityBefore < 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testBorrow: E4");
     }
 
-    function testDistributeSwap(uint256 _swapPercentage) public {
+    function testDistributeSwap(uint256 _maxCleverDeposit, uint256 _swapPercentage) public {
         vm.assume(_swapPercentage > 0 && _swapPercentage < PRECISION);
 
         testHarvest();
 
-        assertTrue(CVX.balanceOf(address(AFCVX_PROXY)) > 0, "testDistributeSwap: E0");
+        uint256 _cvxBalanceBefore = CVX.balanceOf(address(AFCVX_PROXY));
+        assertTrue(_cvxBalanceBefore > 0, "testDistributeSwap: E0");
 
         (uint256 _depositedInFurnaceBefore, uint256 _rewardsFurnaceBefore) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
@@ -127,6 +128,7 @@ contract HarvestTests is Base {
         {
             uint256 _cleverExpectedDeposit;
             (_cleverExpectedDeposit, _convexExpectedDeposit) = _calculateDistribute();
+            _cleverExpectedDeposit = _cleverExpectedDeposit > _maxCleverDeposit ? _maxCleverDeposit : _cleverExpectedDeposit;
             _expectedSwapAmount = _cleverExpectedDeposit * _swapPercentage / PRECISION;
             _expectedDepositAmount = _cleverExpectedDeposit - _expectedSwapAmount;
         }
@@ -134,16 +136,16 @@ contract HarvestTests is Base {
         uint256 _assetsInConvexBefore = CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY));
 
         vm.prank(owner);
-        AFCVX_PROXY.distribute(_swapPercentage, 0);
+        AFCVX_PROXY.distribute(_maxCleverDeposit, _swapPercentage, 0);
 
-        assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), 0, 1, "testDistributeSwap: E2");
-        assertTrue(CLEVERCVXSTRATEGY_PROXY.netAssets(AFCVX_PROXY.protocolFeeBps()) > AFCVX_PROXY.totalAssets() * 80 / 100, "testDistributeSwap: E3");
-        assertTrue(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)) < AFCVX_PROXY.totalAssets() * 20 / 100, "testDistributeSwap: E4");
-        assertTrue(AFCVX_PROXY.totalAssets() > _totalAssetsBefore, "testDistributeSwap: E5"); // dev: getting more clevcvx than cvx we had before
+        assertApproxEqAbs(CVX.balanceOf(address(AFCVX_PROXY)), _cvxBalanceBefore - _convexExpectedDeposit - _expectedDepositAmount - _expectedSwapAmount, 1, "testDistributeSwap: E2");
+
+        assertGe(1 + AFCVX_PROXY.totalAssets() * 20 / 100, CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), "testDistributeSwap: E4"); // dev: GE because of getting more clevcvx than cvx we had before
+        assertGe(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "testDistributeSwap: E5"); // dev: getting more clevcvx than cvx we had before
 
         {
             (uint256 _depositedAfter, , , uint256 _borrowedAfter, ) = CLEVER_CVX_LOCKER.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
-            assertTrue(_borrowingCapacityBefore < 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testDistributeSwap: E6");
+            assertLe(_borrowingCapacityBefore, 1e18 - (_borrowedAfter * 1e18 / _depositedAfter), "testDistributeSwap: E6");
             assertEq(_depositedAfter - _depositedBefore, _expectedDepositAmount, "testDistributeSwap: E7");
             assertEq(_borrowedBefore, _borrowedAfter, "testDistributeSwap: E8");
         }
@@ -154,6 +156,26 @@ contract HarvestTests is Base {
         }
 
         assertEq(CVX_REWARDS_POOL.balanceOf(address(AFCVX_PROXY)), _assetsInConvexBefore + _convexExpectedDeposit, "testDistributeSwap: E10");
+
+        if (CVX.balanceOf(address(AFCVX_PROXY)) > 0) _testTwap();
+    }
+
+    function _testTwap() public {
+        (uint256 _cleverExpectedDeposit, uint256 _convexExpectedDeposit) = _calculateDistribute();
+        assertGe(_convexExpectedDeposit, 0, "_testTwap: E0");
+        assertGt(_cleverExpectedDeposit, 0, "_testTwap: E1");
+
+        uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
+        (uint256 _depositedInFurnaceBefore, uint256 _rewardsFurnaceBefore) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+
+        vm.prank(owner);
+        AFCVX_PROXY.distribute(type(uint256).max, PRECISION, 0);
+
+        assertEq(CVX.balanceOf(address(AFCVX_PROXY)), 0, "_testTwap: E2");
+        assertGt(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "_testTwap: E3"); // dev: gt because of swap
+
+        (uint256 _depositedInFurnaceAfter, uint256 _rewardsFurnaceAfter) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+        assertGe(_depositedInFurnaceAfter + _rewardsFurnaceAfter - _cleverExpectedDeposit, _depositedInFurnaceBefore + _rewardsFurnaceBefore, "_testTwap: E4");
     }
 
     // ============================================================================================
