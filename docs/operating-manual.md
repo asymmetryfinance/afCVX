@@ -6,13 +6,6 @@ This document outlines how the protocol should be interacted with and maintained
 - **_operator_** is a privileged role responsible for protocol management tasks, such as harvesting rewards and depositing into strategies;
 - **_user_** defines any permissionless actions accessible by anyone.
 
-## Owner
-
-> [!CAUTION]
-> In case of an on-going exploit or other emergency invoke the `AfCvx::emergencyShutdown()` method,
-> this will pause all deposit/withdrawal functions as well as disable the `CLeverCvxStrategy`.
-> When the contracts are paused only the owner can perform the protocol management tasks.
-
 ### Configuring Roles
 
 **Changing the owner**
@@ -86,24 +79,19 @@ function setWeeklyWithdrawShare(uint16 newShareBps) external
 
 To distribute the deposited CVX between CLever CVX Strategy and Convex staking contract, as the operator (or owner) call `AfCvx::distribute` function with the following parameters:
 
-- `swap` - a boolean flag indicating whether CVX should be swapped on Curve for clevCVX or deposited in CLever Locker.
-- `minAmountOut` - a minimum amount of clevCVX to receive after the swap. Only used if `swap` parameter is `true`.
+- `_maxCleverDeposit` - the maximum amount of CVX to deposit into Clever. The remaining will stay idle in the afCVX contract.
+- `_swapPercentage` - the percentage of `_cleverDeposit` to swap to clevCVX, remaining assets will be deposited into the Locker
+- `_minAmountOut` - a minimum amount of clevCVX to receive after the swap. Only used if `_swapPercentage > 0`.
 
 ```solidity
-function distribute(bool swap, uint256 minAmountOut) external
-```
-
-To preview the amounts of CVX that will be deposited to each strategy anyone can call `AfCvx::previewDistribute` view function.
-
-```solidity
-function previewDistribute() external view returns (uint256 cleverDepositAmount, uint256 convexStakeAmount)
+function distribute(uint256 _maxCleverDeposit, uint256 _swapPercentage, uint256 _minAmountOut) external
 ```
 
 The frequency of `AfCvx::distribute` calls depends on deposits volume.
 
 ### Borrowing clevCVX and depositing to Furnace
 
-If `AfCvx::distribute` function was invoked with `swap` parameter set to `false` and CVX was deposited to CLever, the operator must call `CLeverCvxStrategy::borrow` after calling `AfCvx::distribute`.
+If `AfCvx::distribute` function was invoked with `_swapPercentage == 0`, and CVX was deposited to CLever, the operator must call `CLeverCvxStrategy::borrow` after calling `AfCvx::distribute`.
 
 ```solidity
 function borrow() external
@@ -186,15 +174,15 @@ function redeem(uint256 shares, address receiver, address owner) external return
 
 If a user wishes to withdraw more CVX than allowed by the weekly withdrawal limit they can request an unlock. Due to the nature of the underlying `CLeverCVXLocker` contract, assets requested to be unlocked won't be withdrawable immediately but is instead queued up for a later time.
 
-To request unlock call `afCvx::requestUnlock` function passing the amount of CVX to unlock, the address to receive CVX and the owner of afCvx shares.
+To request unlock call `afCvx::requestUnlock` function passing the amount of afCVX to burn, the address to receive CVX and the owner of afCvx shares.
 
 ```solidity
-function requestUnlock(uint256 assets, address receiver, address owner)
+function requestUnlock(uint256 _shares, address _receiver, address _owner)
       external
-      returns (uint256 unlockEpoch, uint256 shares)
+      returns (uint256 _unlockEpoch, uint256 _assets)
 ```
 
-The function returns the epoch number when the shares will be available. 
+The function returns the epoch number when the assets will be available. 
 
 The requested unlocks information can always be checked by calling `CLeverCvxStrategy::getRequestedUnlocks`
 
