@@ -30,7 +30,7 @@ contract DeployAfCvx is Script {
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
 
         // Deploy Proxy Factory
-        SimpleProxyFactory _factory = new SimpleProxyFactory();
+        SimpleProxyFactory _factory = SimpleProxyFactory(0x156e0382068C3f96a629f51dcF99cEA5250B9eda);
 
         // Set salt values
         address _deployer = vm.envAddress("DEPLOYER_ADDRESS");
@@ -88,7 +88,14 @@ contract DeployAfCvx is Script {
 // CleverCvxStrategyImplementation:  0xA71021CA12f4A6c0389b7ca6f0a2a2E2FC86426E
 // AfCvxImplementation:  0x47D1226489A28Ae7dEe404d7A8Db03d3B21694f8
 // =====================================
+// Implementation Addresses V3:
+// CleverCvxStrategyImplementation:  0xB510d24856795F4B7Bb6e977E14D3157Ceeaa7FE
+// AfCvxImplementation:  0x108D8d8d89B3459ec37c0E71A51C8a6771aC488c
+// =====================================
 // Proxy Addresses:
 // CleverCvxStrategyProxy:  0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a
 // AfCvxProxy:  0x8668a15b7b023Dc77B372a740FCb8939E15257Cf
+// =====================================
+// Factory Address:
+// SimpleProxyFactory:  0x156e0382068C3f96a629f51dcF99cEA5250B9eda
 // =====================================
