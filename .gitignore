@@ -23,6 +23,7 @@ out/
 
 # Dotenv file
 .env
+script/utils/.env
 .envrc
 
 # VSCode
