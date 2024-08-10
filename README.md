@@ -49,9 +49,9 @@ flowchart TD
 |Contract name|Address|
 |-----------|--------------|
 |AfCvx Proxy| [`0x8668a15b7b023Dc77B372a740FCb8939E15257Cf`](https://etherscan.io/address/0x8668a15b7b023Dc77B372a740FCb8939E15257Cf)|
-|AfCvx Implementation|[`0x87e670b71958d39113b7961dd016ec198ad82c03`](https://etherscan.io/address/0x87e670b71958d39113b7961dd016ec198ad82c03)|
+|AfCvx Implementation|[`0x56664FFcCfF6BB282CcA96808AF03d9042e1f799`](https://etherscan.io/address/0x56664ffccff6bb282cca96808af03d9042e1f799)|
 |CleverCvxStrategy Proxy|[`0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a`](https://etherscan.io/address/0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a)|
-|CleverCvxStrategy Implementation|[`0x98f3f4ba1bbcd4fa3d7caf1eb88d93cd628cff02`](https://etherscan.io/address/0x98f3f4ba1bbcd4fa3d7caf1eb88d93cd628cff02)|
+|CleverCvxStrategy Implementation|[`0xD0F77441B70c84aa3366a9F79F2fD16618739aB0`](https://etherscan.io/address/0xd0f77441b70c84aa3366a9f79f2fd16618739ab0)|
 
 
 ## Audits
