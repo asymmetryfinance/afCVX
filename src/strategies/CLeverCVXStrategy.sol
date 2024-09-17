@@ -98,6 +98,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // View functions
     // ============================================================================================
 
+    // @todo - add LPStrategy.totalAssets
     /// @notice Returns the total assets under management minus debt and obligations
     /// @param _performanceFeeBps The performance fee in basis points
     /// @return The net assets
@@ -112,6 +113,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
             - unlockObligations;
     }
 
+    // @todo - this should be handled somehow
     /// @notice Returns the maximum amount of assets that can be unlocked
     /// @return The amount of assets that can be unlocked
     function maxTotalUnlock() external view returns (uint256) {
@@ -145,6 +147,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Manager functions
     // ============================================================================================
 
+    // @todo - deposit into LPStrategy
     /// @notice Deposits assets to the strategy
     /// @param _assets The amount of assets to deposit
     /// @param _swapPercentage The percentage of assets to swap to clevCVX, remaining assets will be deposited to Locker
@@ -262,6 +265,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Operator functions
     // ============================================================================================
 
+    // @todo - allow borrow and deposit to LPStrategy
     /// @notice borrows maximum amount of clevCVX and deposits it to the Furnace
     /// @dev must be called after `deposit` as CLever doesn't allow depositing and borrowing in the same block
     function borrow() external onlyOperatorOrOwner {
@@ -271,6 +275,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         );
     }
 
+    // @todo - get assets from LPStrategy if needed
     /// @notice withdraws clevCVX from the Furnace and repays the debt to allow unlocking
     /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block
     function repay() external onlyOperatorOrOwner {
