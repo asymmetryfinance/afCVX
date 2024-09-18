@@ -6,6 +6,8 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {LPStrategy} from "./LPStrategy.sol";
+
 import {ICLeverLocker} from "../interfaces/clever/ICLeverLocker.sol";
 import {IFurnace} from "../interfaces/clever/IFurnace.sol";
 
@@ -45,6 +47,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     uint256 private constant REWARDS_DURATION = 1 weeks;
 
     IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    IERC20 private constant CLEVCVX = IERC20(0xf05e58fCeA29ab4dA01A495140B349F8410Ba904);
 
     IFurnace private constant FURNACE = IFurnace(0xCe4dCc5028588377E279255c0335Effe2d7aB72a);
     ICLeverLocker private constant CLEVER_CVX_LOCKER = ICLeverLocker(0x96C68D861aDa016Ed98c30C810879F9df7c64154);
@@ -98,7 +101,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // View functions
     // ============================================================================================
 
-    // @todo - add LPStrategy.totalAssets
     /// @notice Returns the total assets under management minus debt and obligations
     /// @param _performanceFeeBps The performance fee in basis points
     /// @return The net assets
@@ -106,14 +108,14 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         (uint256 _deposited, , , uint256 _borrowed, ) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
         (uint256 _unrealizedFurnace, uint256 _realizedFurnace) = FURNACE.getUserInfo(address(this));
         return
-            _deposited
+            LPStrategy.totalAssets()
+            + _deposited
             + _unrealizedFurnace
             + (_realizedFurnace == 0 ? 0 : (_realizedFurnace - _realizedFurnace * _performanceFeeBps / PRECISION))
             - (_borrowed == 0 ? 0 : _borrowed * (CLEVER_CVX_LOCKER.repayFeePercentage() + CLEVER_PRECISION) / CLEVER_PRECISION)
             - unlockObligations;
     }
 
-    // @todo - this should be handled somehow
     /// @notice Returns the maximum amount of assets that can be unlocked
     /// @return The amount of assets that can be unlocked
     function maxTotalUnlock() external view returns (uint256) {
@@ -265,7 +267,20 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Operator functions
     // ============================================================================================
 
-    // @todo - allow borrow and deposit to LPStrategy
+    // @todo
+    function swapFurnaceToLP(uint256 _amount, uint256 _minAmountOut) external onlyOperatorOrOwner {
+        // if (_amount == 0) revert ZeroAmount();
+
+        FURNACE.withdraw(address(this), _amount);
+        LPStrategy.deposit(
+            0, // cvxAmount
+            _amount, // clevCvxAmount
+            _minAmountOut
+        );
+
+        // emit SwapFurnaceToLP(_amount);
+    }
+
     /// @notice borrows maximum amount of clevCVX and deposits it to the Furnace
     /// @dev must be called after `deposit` as CLever doesn't allow depositing and borrowing in the same block
     function borrow() external onlyOperatorOrOwner {
@@ -275,10 +290,9 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         );
     }
 
-    // @todo - get assets from LPStrategy if needed
     /// @notice withdraws clevCVX from the Furnace and repays the debt to allow unlocking
     /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block
-    function repay() external onlyOperatorOrOwner {
+    function repay(uint256 _lpBurnAmount, uint256 _minAmountOut) external onlyOperatorOrOwner {
         unlockInProgress = true;
         uint256 _unlockObligations = unlockObligations;
         if (_unlockObligations != 0) {
@@ -286,12 +300,16 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
             if (_repayAmount == 0) return;
 
             uint256 _clevCvxRequired = _repayAmount + _repayFee;
-            FURNACE.withdraw(address(this), _clevCvxRequired);
+            if (_lpBurnAmount > 0) _clevCvxRequired -= LPStrategy.withdraw(_lpBurnAmount, _minAmountOut);
+            if (_clevCvxRequired > 0) FURNACE.withdraw(address(this), _clevCvxRequired);
 
             CLEVER_CVX_LOCKER.repay( // this will actually pull _clevCvxRequired amount
                 0, // cvxAmount
                 _repayAmount // clevCvxAmount
             );
+
+            uint256 _surplus = CLEVCVX.balanceOf(address(this));
+            if (_surplus > 0) FURNACE.deposit(_surplus);
         }
     }
 
