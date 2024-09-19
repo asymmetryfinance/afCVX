@@ -262,14 +262,20 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
     /// @dev If `_swapPercentage > 0`, must call through a private RPC to avoid getting sandwiched, as totalAssets will spike
     /// @param _maxCleverDeposit The maximum amount of CVX to deposit into Clever. The remaining will stay idle in this contract
     /// @param _swapPercentage The percentage of `_cleverDeposit` to swap to clevCVX, remaining assets will be deposited to Locker
+    /// @param _lpPercentage The percentage of assets to add to the LP. Those assets will sit idle in the CLeverCVXStrategy contract until `swapFurnaceToLP` is called
     /// @param _minAmountOut Minimum amount of clevCVX to receive from swapping CVX
-    function distribute(uint256 _maxCleverDeposit, uint256 _swapPercentage, uint256 _minAmountOut) external {
+    function distribute(
+        uint256 _maxCleverDeposit,
+        uint256 _swapPercentage,
+        uint256 _lpPercentage,
+        uint256 _minAmountOut
+    ) external {
         if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
         if (paused) revert Paused();
 
         (uint256 _cleverDeposit, uint256 _convexDeposit) = _calculateDistribute();
         _cleverDeposit = Math.min(_cleverDeposit, _maxCleverDeposit);
-        if (_cleverDeposit > 0) cleverStrategy.deposit(_cleverDeposit, _swapPercentage, _minAmountOut);
+        if (_cleverDeposit > 0) cleverStrategy.deposit(_cleverDeposit, _swapPercentage, _lpPercentage, _minAmountOut);
         if (_convexDeposit > 0) CVX_REWARDS_POOL.stake(_convexDeposit);
 
         emit Distributed(_cleverDeposit, _convexDeposit);

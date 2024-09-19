@@ -109,6 +109,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // View functions
     // ============================================================================================
 
+    // @todo - test
     /// @notice Returns the total assets under management minus debt and obligations
     /// @param _performanceFeeBps The performance fee in basis points
     /// @return The net assets
@@ -117,6 +118,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         (uint256 _unrealizedFurnace, uint256 _realizedFurnace) = FURNACE.getUserInfo(address(this));
         return
             LPStrategy.totalAssets()
+            + CVX.balanceOf(address(this))
             + _deposited
             + _unrealizedFurnace
             + (_realizedFurnace == 0 ? 0 : (_realizedFurnace - _realizedFurnace * _performanceFeeBps / PRECISION))
@@ -158,19 +160,28 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Manager functions
     // ============================================================================================
 
-    // @todo - deposit into LPStrategy (leave cvx idle and deposit from swapFurnaceToLP)
+    // @todo - test
     /// @notice Deposits assets to the strategy
     /// @param _assets The amount of assets to deposit
     /// @param _swapPercentage The percentage of assets to swap to clevCVX, remaining assets will be deposited to Locker
+    /// @param _lpPercentage The percentage of assets to add to the LP. Those assets will sit idle in the contract until `swapFurnaceToLP` is called
     /// @param _minAmountOut The minimum amount of clevCVX to receive after the swap. Only used if `swap` is true
     function deposit(
         uint256 _assets,
         uint256 _swapPercentage,
+        uint256 _lpPercentage,
         uint256 _minAmountOut
     ) external onlyManager unlockNotInProgress {
         if (_swapPercentage > PRECISION) revert InvalidSwapPercentage();
+        if (_lpPercentage > PRECISION) revert InvalidLPPercentage();
 
         CVX.safeTransferFrom(msg.sender, address(this), _assets);
+
+        uint256 _lpAmount;
+        if (_lpPercentage > 0) {
+            _lpAmount = _assets * _lpPercentage / PRECISION;
+            _assets -= _lpAmount;
+        }
 
         uint256 _swapAmount;
         uint256 _lockerAmount = _assets;
@@ -182,7 +193,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         if (_swapAmount > 0) FURNACE.deposit(Zap.swapCvxToClevCvx(_swapAmount, _minAmountOut));
         if (_lockerAmount > 0) CLEVER_CVX_LOCKER.deposit(_lockerAmount);
 
-        emit Deposited(_assets, _swapAmount, _lockerAmount);
+        emit Deposited(_assets, _swapAmount, _lockerAmount, _lpAmount);
     }
 
     /// @notice Claims all realised CVX from Furnace
@@ -310,13 +321,9 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     ) external onlyOperatorOrOwner returns (uint256 _amountOut) {
 
         _amountOut = LPStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, _isCVX);
-        if (_isCVX) {
-            CVX.safeTransfer(manager, _amountOut);
-        } else {
-            FURNACE.deposit(_amountOut);
-        }
+        _isCVX ? CVX.safeTransfer(manager, _amountOut) : FURNACE.deposit(_amountOut);
 
-        emit SwapLPToFurnace(_amountOut);
+        emit SwapLPToFurnace(_amountOut, _isCVX);
     }
 
     /// @notice Borrows maximum amount of clevCVX and deposits it to the Furnace
@@ -400,9 +407,9 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     event OperatorSet(address indexed newOperator);
-    event Deposited(uint256 amount, uint256 swapAmount, uint256 lockerAmount);
+    event Deposited(uint256 amount, uint256 swapAmount, uint256 lockerAmount, uint256 lpAmount);
     event SwapFurnaceToLP(uint256 amountOut);
-    event SwapLPToFurnace(uint256 amountOut);
+    event SwapLPToFurnace(uint256 amountOut, bool isCVX);
 
     // ============================================================================================
     // Errors
@@ -414,4 +421,5 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     error MaintenanceWindow();
     error Paused();
     error InvalidSwapPercentage();
+    error InvalidLPPercentage();
 }
