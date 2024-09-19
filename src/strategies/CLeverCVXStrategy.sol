@@ -11,7 +11,7 @@ import {LPStrategy} from "./LPStrategy.sol";
 import {ICLeverLocker} from "../interfaces/clever/ICLeverLocker.sol";
 import {IFurnace} from "../interfaces/clever/IFurnace.sol";
 
-import {TrackedAllowances} from "../utils/TrackedAllowances.sol";
+import {Allowance, TrackedAllowances} from "../utils/TrackedAllowances.sol";
 import {Zap} from "../utils/Zap.sol";
 
 contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
@@ -59,6 +59,14 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     constructor(address _manager) {
         _disableInitializers();
         manager = _manager;
+    }
+
+    // @todo - test
+    function initialize() external initializer {
+        Allowance memory _allowance = Allowance({ spender: address(LPStrategy.LP), token: address(CVX) });
+        _grantAndTrackInfiniteAllowance(_allowance);
+        _allowance.token = address(CLEVCVX);
+        _grantAndTrackInfiniteAllowance(_allowance);
     }
 
     // ============================================================================================
@@ -117,6 +125,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     }
 
     /// @notice Returns the maximum amount of assets that can be unlocked
+    /// @dev This function may understate the amount of assets that can be unlocked, if CVX is directly deposited into the LPStrategy
     /// @return The amount of assets that can be unlocked
     function maxTotalUnlock() external view returns (uint256) {
         (uint256 _deposited, , , uint256 _borrowed, ) = CLEVER_CVX_LOCKER.getUserInfo(address(this));
@@ -149,7 +158,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Manager functions
     // ============================================================================================
 
-    // @todo - deposit into LPStrategy
+    // @todo - deposit into LPStrategy (leave cvx idle and deposit from swapFurnaceToLP)
     /// @notice Deposits assets to the strategy
     /// @param _assets The amount of assets to deposit
     /// @param _swapPercentage The percentage of assets to swap to clevCVX, remaining assets will be deposited to Locker
@@ -267,22 +276,51 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Operator functions
     // ============================================================================================
 
-    // @todo
-    function swapFurnaceToLP(uint256 _amount, uint256 _minAmountOut) external onlyOperatorOrOwner {
-        // if (_amount == 0) revert ZeroAmount();
+    // @todo - test
+    /// @notice Adds liquidity to the CVX/clevCVX Curve pool using the LPStrategy library
+    /// @notice Withdraws clevCVX from the Furnace and uses any idle CVX
+    /// @param _clevcvxAmount The amount of clevCVX to withdraw from the Furnace and add to the LP
+    /// @param _minAmountOut The minimum amount of LP tokens to receive after adding liquidity
+    /// @return _amountOut The amount of LP tokens received
+    function swapFurnaceToLP(
+        uint256 _clevcvxAmount,
+        uint256 _minAmountOut
+    ) external onlyOperatorOrOwner returns (uint256 _amountOut) {
 
-        FURNACE.withdraw(address(this), _amount);
-        LPStrategy.deposit(
-            0, // cvxAmount
-            _amount, // clevCvxAmount
+        if (_clevcvxAmount > 0) FURNACE.withdraw(address(this), _clevcvxAmount);
+
+        _amountOut = LPStrategy.addLiquidity(
+            CVX.balanceOf(address(this)),
+            _clevcvxAmount,
             _minAmountOut
         );
 
-        // emit SwapFurnaceToLP(_amount);
+        emit SwapFurnaceToLP(_amountOut);
     }
 
-    /// @notice borrows maximum amount of clevCVX and deposits it to the Furnace
-    /// @dev must be called after `deposit` as CLever doesn't allow depositing and borrowing in the same block
+    // @todo - test
+    /// @notice Removes liquidity from the CVX/clevCVX Curve pool using the LPStrategy library as clevCVX and deposits it to the Furnace
+    /// @param _burnAmount The amount of LP tokens to burn
+    /// @param _minAmountOut The minimum amount of clevCVX to receive after removing liquidity
+    /// @return _amountOut The amount of clevCVX received from burn and deposited to the Furnace
+    function swapLPToFurnace(
+        uint256 _burnAmount,
+        uint256 _minAmountOut,
+        bool _isCVX
+    ) external onlyOperatorOrOwner returns (uint256 _amountOut) {
+
+        _amountOut = LPStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, _isCVX);
+        if (_isCVX) {
+            CVX.safeTransfer(manager, _amountOut);
+        } else {
+            FURNACE.deposit(_amountOut);
+        }
+
+        emit SwapLPToFurnace(_amountOut);
+    }
+
+    /// @notice Borrows maximum amount of clevCVX and deposits it to the Furnace
+    /// @dev Must be called after `deposit` as CLever doesn't allow depositing and borrowing in the same block
     function borrow() external onlyOperatorOrOwner {
         CLEVER_CVX_LOCKER.borrow(
             _calculateMaxBorrowAmount(), // amount
@@ -290,9 +328,11 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         );
     }
 
-    /// @notice withdraws clevCVX from the Furnace and repays the debt to allow unlocking
-    /// @dev must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block
-    function repay(uint256 _lpBurnAmount, uint256 _minAmountOut) external onlyOperatorOrOwner {
+    // @todo - test
+    /// @notice Withdraws clevCVX from the Furnace and repays the debt to allow unlocking
+    /// @dev Must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block
+    /// @dev If `_burnAmount` is too big, `_clevCvxRequired` will underflow and the function will revert
+    function repay(uint256 _burnAmount, uint256 _minAmountOut) external onlyOperatorOrOwner {
         unlockInProgress = true;
         uint256 _unlockObligations = unlockObligations;
         if (_unlockObligations != 0) {
@@ -300,7 +340,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
             if (_repayAmount == 0) return;
 
             uint256 _clevCvxRequired = _repayAmount + _repayFee;
-            if (_lpBurnAmount > 0) _clevCvxRequired -= LPStrategy.withdraw(_lpBurnAmount, _minAmountOut);
+            if (_burnAmount > 0) _clevCvxRequired -= LPStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, false);
             if (_clevCvxRequired > 0) FURNACE.withdraw(address(this), _clevCvxRequired);
 
             CLEVER_CVX_LOCKER.repay( // this will actually pull _clevCvxRequired amount
@@ -361,6 +401,8 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
 
     event OperatorSet(address indexed newOperator);
     event Deposited(uint256 amount, uint256 swapAmount, uint256 lockerAmount);
+    event SwapFurnaceToLP(uint256 amountOut);
+    event SwapLPToFurnace(uint256 amountOut);
 
     // ============================================================================================
     // Errors

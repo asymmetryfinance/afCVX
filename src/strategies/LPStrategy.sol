@@ -36,7 +36,7 @@ library LPStrategy {
     // Mutative functions
     // ============================================================================================
 
-    function deposit(uint256 _cvxAmount, uint256 _clevCvxAmount, uint256 _minAmountOut) external {
+    function addLiquidity(uint256 _cvxAmount, uint256 _clevCvxAmount, uint256 _minAmountOut) external returns (uint256) {
         if (_cvxAmount == 0 && _clevCvxAmount == 0) revert ZeroAmount();
 
         if (_cvxAmount > 0) CVX.forceApprove(address(LP), _cvxAmount);
@@ -46,12 +46,16 @@ library LPStrategy {
         _amounts[COIN0] = _cvxAmount;
         _amounts[COIN1] = _clevCvxAmount
 ;
-        LP.add_liquidity(_amounts, _minAmountOut);
+        return LP.add_liquidity(_amounts, _minAmountOut);
     }
 
-    function withdraw(uint256 _burnAmount, uint256 _minAmountOut) external returns (uint256) {
+    function removeLiquidityOneCoin(uint256 _burnAmount, uint256 _minAmountOut, bool _isCVX) external returns (uint256) {
         if (_burnAmount == 0) revert ZeroAmount();
-        return LP.remove_liquidity_one_coin(_burnAmount, int128(int256(COIN1)), _minAmountOut);
+        return LP.remove_liquidity_one_coin(
+            _burnAmount,
+            _isCVX ? int128(int256(COIN0)) : int128(int256(COIN1)),
+            _minAmountOut
+        );
     }
 
     // ============================================================================================
