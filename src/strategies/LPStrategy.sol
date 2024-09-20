@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
+import {Ownable} from "solady/auth/Ownable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-interface ICurvePool {
-    function add_liquidity(uint256[2] memory _amounts, uint256 _min_mint_amount) external returns (uint256);
-    function remove_liquidity_one_coin(uint256 _burn_amount, int128 i, uint256 _min_received) external returns (uint256);
-    function get_balances() external view returns (uint256[2] memory);
-    function balanceOf(address _account) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
-}
+import {ILPStrategy} from "../interfaces/asymmetry/ILPStrategy.sol";
+import {ICurvePool} from "../interfaces/curve/ICurvePool.sol";
 
-library LPStrategy {
+import {Allowance, TrackedAllowances} from "../utils/TrackedAllowances.sol";
+
+contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable {
 
     using SafeERC20 for IERC20;
+
+    address public immutable afCVX;
+    address public immutable cleverStrategy;
 
     uint256 private constant COIN0 = 0; // CVX
     uint256 private constant COIN1 = 1; // clevCVX
@@ -24,19 +26,43 @@ library LPStrategy {
     ICurvePool public constant LP = ICurvePool(0xF9078Fb962A7D13F55d40d49C8AA6472aBD1A5a6);
 
     // ============================================================================================
+    // Constructor
+    // ============================================================================================
+
+    constructor(address _afCVX, address _cleverStrategy) {
+        if  (_afCVX == address(0) || _cleverStrategy == address(0)) revert ZeroAddress();
+        _disableInitializers();
+        afCVX = _afCVX;
+        cleverStrategy = _cleverStrategy;
+    }
+
+    function initialize() external initializer {
+        Allowance memory _allowance = Allowance({ spender: address(LP), token: address(CVX) });
+        _grantAndTrackInfiniteAllowance(_allowance);
+        _allowance.token = address(CLEVCVX);
+        _grantAndTrackInfiniteAllowance(_allowance);
+    }
+
+    // ============================================================================================
     // View functions
     // ============================================================================================
 
     function totalAssets() external view returns (uint256) {
         uint256[2] memory _balances = LP.get_balances();
-        return LP.balanceOf(address(this)) * (_balances[COIN0] + _balances[COIN1]) / LP.totalSupply(); // assuming clevCVX == CVX
+        return
+            CVX.balanceOf(address(this))
+            + (LP.balanceOf(address(this)) * (_balances[COIN0] + _balances[COIN1]) / LP.totalSupply()); // assuming clevCVX == CVX
     }
 
     // ============================================================================================
     // Mutative functions
     // ============================================================================================
 
-    function addLiquidity(uint256 _cvxAmount, uint256 _clevCvxAmount, uint256 _minAmountOut) external returns (uint256) {
+    function addLiquidity(
+        uint256 _cvxAmount,
+        uint256 _clevCvxAmount,
+        uint256 _minAmountOut
+    ) external onlyCLeverStrategy returns (uint256) {
         if (_cvxAmount == 0 && _clevCvxAmount == 0) revert ZeroAmount();
 
         if (_cvxAmount > 0) CVX.forceApprove(address(LP), _cvxAmount);
@@ -49,13 +75,37 @@ library LPStrategy {
         return LP.add_liquidity(_amounts, _minAmountOut);
     }
 
-    function removeLiquidityOneCoin(uint256 _burnAmount, uint256 _minAmountOut, bool _isCVX) external returns (uint256) {
+    function removeLiquidityOneCoin(
+        uint256 _burnAmount,
+        uint256 _minAmountOut,
+        bool _isCVX
+    ) external onlyCLeverStrategy returns (uint256) {
         if (_burnAmount == 0) revert ZeroAmount();
         return LP.remove_liquidity_one_coin(
             _burnAmount,
             _isCVX ? int128(int256(COIN0)) : int128(int256(COIN1)),
-            _minAmountOut
+            _minAmountOut,
+            cleverStrategy
         );
+    }
+
+    // ============================================================================================
+    // Owner functions
+    // ============================================================================================
+
+    function sendCVXBackToVault(uint256 _amount) external {
+        CVX.safeTransfer(afCVX, _amount);
+    }
+
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
+
+    // ============================================================================================
+    // Modifiers
+    // ============================================================================================
+
+    modifier onlyCLeverStrategy() {
+        if (msg.sender != cleverStrategy) revert Unauthorized();
+        _;
     }
 
     // ============================================================================================
@@ -63,4 +113,5 @@ library LPStrategy {
     // ============================================================================================
 
     error ZeroAmount();
+    error ZeroAddress();
 }
