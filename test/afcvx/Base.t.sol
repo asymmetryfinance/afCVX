@@ -32,8 +32,8 @@ abstract contract Base is Test {
     LPStrategy public lpStrategyImplementation;
     LPStrategy public LPSTRATEGY_PROXY;
 
-    AfCvx public constant AFCVX_PROXY = AfCvx(payable(address(0x8668a15b7b023Dc77B372a740FCb8939E15257Cf)));
-    CleverCvxStrategy public constant CLEVERCVXSTRATEGY_PROXY = CleverCvxStrategy(address(0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a));
+    AfCvx public constant AFCVX_PROXY = AfCvx(payable(0x8668a15b7b023Dc77B372a740FCb8939E15257Cf));
+    CleverCvxStrategy public constant CLEVERCVXSTRATEGY_PROXY = CleverCvxStrategy(0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a);
     SimpleProxyFactory public constant SIMPLE_PROXY_FACTORY = SimpleProxyFactory(0x156e0382068C3f96a629f51dcF99cEA5250B9eda);
 
     IConvexRewardsPool public constant CVX_REWARDS_POOL = IConvexRewardsPool(0xCF50b810E57Ac33B91dCF525C6ddd9881B139332);

@@ -241,7 +241,32 @@ contract HarvestTests is Base {
         assertEq(CVX.balanceOf(address(LPSTRATEGY_PROXY)), _lpStrategyCvxBalanceBefore + _expectedLPAmount, "testDistributeFuzzOptions: E4");
     }
 
-    // function swapFurnaceToLP(
+    function testSwapFurnaceToLP(uint256 _cvxAmount, uint256 _clevcvxAmount) public {
+        testDistributeLP();
+
+        uint256 _lpStrategyCvxBalanceBefore = CVX.balanceOf(address(LPSTRATEGY_PROXY));
+        assertGt(_lpStrategyCvxBalanceBefore, 0, "swapFurnaceToLP: E0");
+
+        (uint256 _depositedInFurnaceBefore,) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+        assertGt(_depositedInFurnaceBefore, 0, "swapFurnaceToLP: E1");
+        console.log("depositedInFurnaceBefore", _depositedInFurnaceBefore);
+
+        vm.assume(_cvxAmount <= _lpStrategyCvxBalanceBefore && _clevcvxAmount <= _depositedInFurnaceBefore);
+
+        uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
+
+        vm.prank(owner);
+        uint256 _lpAmountOut = CLEVERCVXSTRATEGY_PROXY.swapFurnaceToLP(_cvxAmount, _clevcvxAmount, 0);
+
+        assertEq(CVX.balanceOf(address(LPSTRATEGY_PROXY)), _lpStrategyCvxBalanceBefore - _cvxAmount, "swapFurnaceToLP: E2");
+        (uint256 _depositedInFurnaceAfter,) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
+        assertEq(_depositedInFurnaceAfter, _depositedInFurnaceBefore - _clevcvxAmount, "swapFurnaceToLP: E3");
+        assertEq(IERC20(address(LPSTRATEGY_PROXY.LP())).balanceOf(address(LPSTRATEGY_PROXY)), _lpAmountOut, "swapFurnaceToLP: E4");
+        assertEq(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, "swapFurnaceToLP: E5");
+    }
+
+    // function swapFurnaceToLPInvalidCaller
+
     // function swapLPToFurnace(
 
     // ============================================================================================

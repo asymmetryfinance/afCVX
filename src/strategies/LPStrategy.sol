@@ -65,9 +65,6 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     ) external onlyCLeverStrategy returns (uint256) {
         if (_cvxAmount == 0 && _clevCvxAmount == 0) revert ZeroAmount();
 
-        if (_cvxAmount > 0) CVX.forceApprove(address(LP), _cvxAmount);
-        if (_clevCvxAmount > 0) CLEVCVX.forceApprove(address(LP), _clevCvxAmount);
-
         uint256[2] memory _amounts;
         _amounts[COIN0] = _cvxAmount;
         _amounts[COIN1] = _clevCvxAmount
