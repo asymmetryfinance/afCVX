@@ -90,7 +90,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // Owner functions
     // ============================================================================================
 
-    function sendCVXBackToVault(uint256 _amount) external {
+    function sendCVXBackToVault(uint256 _amount) external onlyOwner {
         CVX.safeTransfer(afCVX, _amount);
     }
 
