@@ -14,11 +14,11 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
 
     using SafeERC20 for IERC20;
 
-    address public immutable afCVX;
-    address public immutable cleverStrategy;
-
     uint256 private constant COIN0 = 0; // CVX
     uint256 private constant COIN1 = 1; // clevCVX
+
+    address public constant AFCVX = 0x8668a15b7b023Dc77B372a740FCb8939E15257Cf;
+    address public constant CLEVER_STRATEGY = 0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a;
 
     IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     IERC20 private constant CLEVCVX = IERC20(0xf05e58fCeA29ab4dA01A495140B349F8410Ba904);
@@ -29,18 +29,15 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // Constructor
     // ============================================================================================
 
-    constructor(address _afCVX, address _cleverStrategy) {
-        if  (_afCVX == address(0) || _cleverStrategy == address(0)) revert ZeroAddress();
+    constructor() {
         _disableInitializers();
-        afCVX = _afCVX;
-        cleverStrategy = _cleverStrategy;
     }
 
-    function initialize() external initializer {
-        Allowance memory _allowance = Allowance({ spender: address(LP), token: address(CVX) });
-        _grantAndTrackInfiniteAllowance(_allowance);
-        _allowance.token = address(CLEVCVX);
-        _grantAndTrackInfiniteAllowance(_allowance);
+    function initialize(address _owner) external initializer {
+        _initializeOwner(_owner);
+        __UUPSUpgradeable_init();
+        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(LP), token: address(CVX) }));
+        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(LP), token: address(CLEVCVX) }));
     }
 
     // ============================================================================================
@@ -95,7 +92,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
             _burnAmount,
             _isCVX ? int128(int256(COIN0)) : int128(int256(COIN1)),
             _minAmountOut,
-            cleverStrategy
+            CLEVER_STRATEGY
         );
     }
 
@@ -108,11 +105,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     /// @param _amount The amount of tokens to sweep
     /// @param _token The token to sweep
     function sweep(uint256 _amount, address _token) external onlyOwner {
-        if (_token == address(CVX)) {
-            CVX.safeTransfer(afCVX, _amount);
-            return;
-        }
-        IERC20(_token).safeTransfer(owner(), _amount);
+        _token == address(CVX) ? CVX.safeTransfer(AFCVX, _amount) : IERC20(_token).safeTransfer(msg.sender, _amount);
     }
 
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
@@ -122,7 +115,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // ============================================================================================
 
     modifier onlyCLeverStrategy() {
-        if (msg.sender != cleverStrategy) revert Unauthorized();
+        if (msg.sender != CLEVER_STRATEGY) revert Unauthorized();
         _;
     }
 
@@ -131,5 +124,4 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // ============================================================================================
 
     error ZeroAmount();
-    error ZeroAddress();
 }

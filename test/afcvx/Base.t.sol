@@ -64,13 +64,13 @@ abstract contract Base is Test {
         // Deploy implementation contracts
         afCvxImplementation = new AfCvx(address(CLEVERCVXSTRATEGY_PROXY));
         cleverCvxStrategyImplementation = new CleverCvxStrategy(address(AFCVX_PROXY), _lpStrategyProxyAddr);
-        lpStrategyImplementation = new LPStrategy(address(AFCVX_PROXY), address(CLEVERCVXSTRATEGY_PROXY));
+        lpStrategyImplementation = new LPStrategy();
 
         // Deploy CleverCvxStrategy proxy
         LPSTRATEGY_PROXY = LPStrategy(SIMPLE_PROXY_FACTORY.deployDeterministic(
             _lpStrategyProxySalt,
             address(lpStrategyImplementation),
-            abi.encodeWithSignature("initialize()")
+            abi.encodeWithSignature("initialize(address)", owner)
         ));
         require(address(LPSTRATEGY_PROXY) == _lpStrategyProxyAddr, "predicted wrong lpStrategyProxyAddr proxy address");
 
