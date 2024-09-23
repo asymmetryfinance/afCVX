@@ -47,17 +47,25 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // View functions
     // ============================================================================================
 
+    /// @notice Returns the total assets under management
+    /// @dev Assumes that clevCVX == CVX, because we can redeem clevCVX for CVX using the cleverStrategy
+    /// @return The total assets under management
     function totalAssets() external view returns (uint256) {
         uint256[2] memory _balances = LP.get_balances();
         return
             CVX.balanceOf(address(this))
-            + (LP.balanceOf(address(this)) * (_balances[COIN0] + _balances[COIN1]) / LP.totalSupply()); // assuming clevCVX == CVX
+            + (LP.balanceOf(address(this)) * (_balances[COIN0] + _balances[COIN1]) / LP.totalSupply());
     }
 
     // ============================================================================================
     // Mutative functions
     // ============================================================================================
 
+    /// @notice Adds liquidity to the clevCVX/CVX Curve pool
+    /// @param _cvxAmount The amount of CVX to add
+    /// @param _clevCvxAmount The amount of clevCVX to add
+    /// @param _minAmountOut The minimum amount of LP tokens to receive
+    /// @return The amount of LP tokens received
     function addLiquidity(
         uint256 _cvxAmount,
         uint256 _clevCvxAmount,
@@ -72,6 +80,11 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
         return LP.add_liquidity(_amounts, _minAmountOut);
     }
 
+    /// @notice Removes liquidity from the clevCVX/CVX Curve pool
+    /// @param _burnAmount The amount of LP tokens to burn
+    /// @param _minAmountOut The minimum amount of CVX and clevCVX to receive
+    /// @param _isCVX Whether to remove CVX or clevCVX
+    /// @return The amounts of CVX and clevCVX received
     function removeLiquidityOneCoin(
         uint256 _burnAmount,
         uint256 _minAmountOut,
@@ -90,8 +103,16 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     // Owner functions
     // ============================================================================================
 
-    function sendCVXBackToVault(uint256 _amount) external onlyOwner {
-        CVX.safeTransfer(afCVX, _amount);
+    /// @notice Sweeps idle assets to the owner
+    /// @dev If the token is CVX, it will be sent to the afCVX
+    /// @param _amount The amount of tokens to sweep
+    /// @param _token The token to sweep
+    function sweep(uint256 _amount, address _token) external onlyOwner {
+        if (_token == address(CVX)) {
+            CVX.safeTransfer(afCVX, _amount);
+            return;
+        }
+        IERC20(_token).safeTransfer(owner(), _amount);
     }
 
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}

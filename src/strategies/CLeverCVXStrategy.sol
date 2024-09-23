@@ -103,7 +103,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // View functions
     // ============================================================================================
 
-    // @todo - test
     /// @notice Returns the total assets under management minus debt and obligations
     /// @param _performanceFeeBps The performance fee in basis points
     /// @return The net assets
@@ -153,7 +152,6 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Manager functions
     // ============================================================================================
 
-    // @todo - test
     /// @notice Deposits assets to the strategy
     /// @param _assets The amount of assets to deposit
     /// @param _swapPercentage The percentage of assets to swap to clevCVX, remaining assets will be deposited to Locker
@@ -281,8 +279,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // Operator functions
     // ============================================================================================
 
-    // @todo - test
-    /// @notice Adds liquidity to the CVX/clevCVX Curve pool using the LPStrategy library
+    /// @notice Adds liquidity to the CVX/clevCVX Curve pool
     /// @notice Withdraws clevCVX from the Furnace and uses any idle CVX in the LPStrategy
     /// @param _cvxAmount The amount of CVX to add to the LP. LPStrategy must have that amount of CVX
     /// @param _clevcvxAmount The amount of clevCVX to withdraw from the Furnace and add to the LP
@@ -308,11 +305,11 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         emit SwapFurnaceToLP(_amountOut);
     }
 
-    // @todo - test
-    /// @notice Removes liquidity from the CVX/clevCVX Curve pool using the LPStrategy library as clevCVX and deposits it to the Furnace
+    /// @notice Removes liquidity from the CVX/clevCVX Curve pool. If `_isCVX` is true, removes CVX and sends it to the manager
+    ///         Otherwise, removes clevCVX and deposits it to the Furnace
     /// @param _burnAmount The amount of LP tokens to burn
-    /// @param _minAmountOut The minimum amount of clevCVX to receive after removing liquidity
-    /// @return _amountOut The amount of clevCVX received from burn and deposited to the Furnace
+    /// @param _minAmountOut The minimum amount of token to receive after removing liquidity
+    /// @return _amountOut The amount of token received from burn
     function swapLPToFurnace(
         uint256 _burnAmount,
         uint256 _minAmountOut,
@@ -334,8 +331,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         );
     }
 
-    // @todo - test
-    /// @notice Withdraws clevCVX from the Furnace and repays the debt to allow unlocking
+    /// @notice Withdraws clevCVX from the Furnace and/or the Curve pool, and repays the debt to allow unlocking
     /// @dev Must be called before `unlock` as Clever doesn't allow repaying and unlocking in the same block
     /// @dev If `_burnAmount` is too big, `_clevCvxRequired` will underflow and the function will revert
     function repay(uint256 _burnAmount, uint256 _minAmountOut) external onlyOperatorOrOwner {
@@ -346,16 +342,13 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
             if (_repayAmount == 0) return;
 
             uint256 _clevCvxRequired = _repayAmount + _repayFee;
-            if (_burnAmount > 0) _clevCvxRequired -= lpStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, false);
+            if (_burnAmount > 0) _clevCvxRequired -= lpStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, false); // removes clevCVX
             if (_clevCvxRequired > 0) FURNACE.withdraw(address(this), _clevCvxRequired);
 
             CLEVER_CVX_LOCKER.repay( // this will actually pull _clevCvxRequired amount
                 0, // cvxAmount
                 _repayAmount // clevCvxAmount
             );
-
-            uint256 _surplus = CLEVCVX.balanceOf(address(this));
-            if (_surplus > 0) FURNACE.deposit(_surplus);
         }
     }
 
