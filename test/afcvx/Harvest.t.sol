@@ -253,7 +253,6 @@ contract HarvestTests is Base {
 
         (uint256 _depositedInFurnaceBefore,) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
         assertGt(_depositedInFurnaceBefore, 0, "swapFurnaceToLP: E1");
-        console.log("depositedInFurnaceBefore", _depositedInFurnaceBefore);
 
         uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
 

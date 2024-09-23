@@ -317,7 +317,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     ) external onlyOperatorOrOwner returns (uint256 _amountOut) {
 
         _amountOut = lpStrategy.removeLiquidityOneCoin(_burnAmount, _minAmountOut, _isCVX);
-        _isCVX ? CVX.safeTransfer(manager, _amountOut) : FURNACE.deposit(_amountOut);
+        if (!_isCVX) FURNACE.deposit(_amountOut);
 
         emit SwapLPToFurnace(_amountOut, _isCVX);
     }

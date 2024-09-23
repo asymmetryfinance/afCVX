@@ -92,7 +92,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
             _burnAmount,
             _isCVX ? int128(int256(COIN0)) : int128(int256(COIN1)),
             _minAmountOut,
-            CLEVER_STRATEGY
+            _isCVX ? AFCVX : CLEVER_STRATEGY
         );
     }
 
