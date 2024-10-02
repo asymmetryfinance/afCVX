@@ -3,7 +3,7 @@ pragma solidity 0.8.25;
 
 import "./Base.t.sol";
 
-contract LPTests is Base {
+contract LPTests is Base { // @todo - test rewards
 
     // ============================================================================================
     // Setup

@@ -8,4 +8,6 @@ interface IConvexRewardsPool {
     function withdraw(uint256 amount, bool claim) external;
     function withdrawAll(bool claim) external;
     function getReward(address account, bool claimExtras, bool stake) external;
+    function getReward(address account, bool claimExtras) external;
+    function withdrawAndUnwrap(uint256 amount, bool claim) external returns (bool);
 }
