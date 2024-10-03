@@ -5,6 +5,8 @@ import {Ownable} from "solady/auth/Ownable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {Zap} from "../utils/Zap.sol";
+
 import {ILPStrategy} from "../interfaces/asymmetry/ILPStrategy.sol";
 import {ICurvePool} from "../interfaces/curve/ICurvePool.sol";
 import {IConvexRewardsPool} from "../interfaces/convex/IConvexRewardsPool.sol";
@@ -16,8 +18,6 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
 
     using SafeERC20 for IERC20;
 
-    // bool public dump; // @todo - export swapping to Zap.sol
-
     uint256 public constant CONVEX_PID = 139;
 
     uint256 private constant COIN0 = 0; // CVX
@@ -26,14 +26,9 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     address public constant AFCVX = 0x8668a15b7b023Dc77B372a740FCb8939E15257Cf;
     address public constant CLEVER_STRATEGY = 0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a;
 
-    IERC20 private constant CVX = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     IERC20 private constant CLEVCVX = IERC20(0xf05e58fCeA29ab4dA01A495140B349F8410Ba904);
-    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 private constant CRV = IERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
 
     ICurvePool public constant LP = ICurvePool(0xF9078Fb962A7D13F55d40d49C8AA6472aBD1A5a6);
-    ICurvePool public constant TRICRV = ICurvePool(0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14);
-    ICurvePool public constant CVXWETH = ICurvePool(0xB576491F1E6e5E62f1d8F26062Ee822B40B0E0d4);
 
     IConvexBooster public constant CONVEX_BOOSTER = IConvexBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
     IConvexRewardsPool public immutable CONVEX_REWARDS = IConvexRewardsPool(0x706f34D0aB8f4f9838F15b0D155C8Ef42229294B);
@@ -49,11 +44,9 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     function initialize(address _owner) external initializer {
         _initializeOwner(_owner);
         __UUPSUpgradeable_init();
-        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(LP), token: address(CVX) }));
+        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(LP), token: address(Zap.CVX) }));
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(LP), token: address(CLEVCVX) }));
         _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CONVEX_BOOSTER), token: address(LP) }));
-        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(TRICRV), token: address(CRV) }));
-        _grantAndTrackInfiniteAllowance(Allowance({ spender: address(CVXWETH), token: address(WETH) }));
     }
 
     // ============================================================================================
@@ -66,13 +59,15 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     function totalAssets() external view returns (uint256) {
         uint256[2] memory _balances = LP.get_balances();
         return
-            CVX.balanceOf(address(this))
+            Zap.CVX.balanceOf(address(this))
             + (CONVEX_REWARDS.balanceOf(address(this)) * (_balances[COIN0] + _balances[COIN1]) / LP.totalSupply());
     }
 
-    // function pendingRewards() external view returns (uint256) {
-    //     return CONVEX_REWARDS.earned(address(this));
-    // } // @todo
+    /// @notice Returns the amount of rewards pending to be claimed
+    /// @return The amount of rewards pending to be claimed
+    function pendingRewards() external view returns (uint256) {
+        return CONVEX_REWARDS.earned(address(this));
+    }
 
     // ============================================================================================
     // Mutative functions
@@ -129,20 +124,20 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     /// @param _amount The amount of tokens to sweep
     /// @param _token The token to sweep
     function sweep(uint256 _amount, address _token) external onlyOwner {
-        _token == address(CVX) ? CVX.safeTransfer(AFCVX, _amount) : IERC20(_token).safeTransfer(msg.sender, _amount);
+        _token == address(Zap.CVX) ? Zap.CVX.safeTransfer(AFCVX, _amount) : IERC20(_token).safeTransfer(msg.sender, _amount);
     }
 
     /// @notice Claims rewards from the Convex staking pool and swap CRV for CVX
     /// @dev Rewards are sent to this contract, and can be swept by the owner
     /// @dev Should be called using a private RPC to avoid sandwich attacks
-    /// @param _minAmount The minimum amount of CVX to receive from CRV rewards
-    function claimRewards(uint256 _minAmount) external onlyOwner {
+    /// @param _minAmountOut The minimum amount of CVX to receive from CRV rewards
+    function claimRewards(uint256 _minAmountOut) external onlyOwner {
         CONVEX_REWARDS.getReward(
             address(this),
             true // claimExtras
         );
 
-        _dump(); // potential rewards in other tokens can be swept by the owner and reinvested manually
+        Zap.swapCrvToCvx(_minAmountOut); // potential rewards in other tokens can be swept by the owner and reinvested manually
     }
 
     function _authorizeUpgrade(address /* newImplementation */ ) internal view override onlyOwner {}
@@ -177,15 +172,6 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
             _amount,
             false // claim rewards
         );
-    }
-
-    /// @notice Swaps CRV for CVX
-    function _dump() private {
-
-        // triCRV (CRV -> WETH)
-        uint256 _triCRV = TRICRV.exchange(0, 2, TRICRV.balanceOf(address(this)), 0);
-        // CVX/WETH (WETH -> CVX)
-        CVXWETH.exchange(1, 0, IERC20(WETH).balanceOf(address(this)), 0);
     }
 
     // ============================================================================================

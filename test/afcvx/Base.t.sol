@@ -21,6 +21,7 @@ abstract contract Base is Test {
 
     address public immutable owner = 0x263b03BbA0BbbC320928B6026f5eAAFAD9F1ddeb;
 
+    IERC20Metadata public constant CRV = IERC20Metadata(0xD533a949740bb3306d119CC777fa900bA034cd52);
     IERC20Metadata public constant CVX = IERC20Metadata(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     IERC20Metadata public constant CVXCRV = IERC20Metadata(0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7);
 

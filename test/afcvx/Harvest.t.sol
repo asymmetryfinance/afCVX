@@ -260,7 +260,7 @@ contract HarvestTests is Base {
         uint256 _lpAmountOut = CLEVERCVXSTRATEGY_PROXY.swapFurnaceToLP(_cvxAmount, _clevcvxAmount, 0);
 
         assertEq(CVX.balanceOf(address(LPSTRATEGY_PROXY)), _lpStrategyCvxBalanceBefore - _cvxAmount, "swapFurnaceToLP: E2");
-        assertEq(IERC20(address(LPSTRATEGY_PROXY.LP())).balanceOf(address(LPSTRATEGY_PROXY)), _lpAmountOut, "swapFurnaceToLP: E3");
+        assertEq(LPSTRATEGY_PROXY.CONVEX_REWARDS().balanceOf(address(LPSTRATEGY_PROXY)), _lpAmountOut, "swapFurnaceToLP: E3");
         assertApproxEqAbs(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, 1e17, "swapFurnaceToLP: E4");
     }
 
@@ -271,7 +271,7 @@ contract HarvestTests is Base {
         uint256 _totalAssetsBefore = AFCVX_PROXY.totalAssets();
         uint256 _cvxInAFCVXBefore = CVX.balanceOf(address(AFCVX_PROXY));
 
-        uint256 _lpBalanceBefore = IERC20(address(LPSTRATEGY_PROXY.LP())).balanceOf(address(LPSTRATEGY_PROXY));
+        uint256 _lpBalanceBefore = LPSTRATEGY_PROXY.CONVEX_REWARDS().balanceOf(address(LPSTRATEGY_PROXY));
 
         vm.prank(owner);
         uint256 _amountOut = CLEVERCVXSTRATEGY_PROXY.swapLPToFurnace(_lpBalanceBefore, 0, _isCVX);
@@ -282,7 +282,7 @@ contract HarvestTests is Base {
             (uint256 _depositedInFurnaceAfter,) = FURNACE.getUserInfo(address(CLEVERCVXSTRATEGY_PROXY));
             assertApproxEqAbs(_depositedInFurnaceAfter - _amountOut, _depositedInFurnaceBefore, 1e10, "swapLPToFurnace: E1");
         }
-        assertEq(IERC20(address(LPSTRATEGY_PROXY.LP())).balanceOf(address(LPSTRATEGY_PROXY)), 0, "swapLPToFurnace: E2");
+        assertEq(LPSTRATEGY_PROXY.CONVEX_REWARDS().balanceOf(address(LPSTRATEGY_PROXY)), 0, "swapLPToFurnace: E2");
         assertApproxEqAbs(AFCVX_PROXY.totalAssets(), _totalAssetsBefore, 1e18, "swapLPToFurnace: E3");
     }
 
