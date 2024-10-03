@@ -67,7 +67,7 @@ abstract contract Base is Test {
         cleverCvxStrategyImplementation = new CleverCvxStrategy(address(AFCVX_PROXY), _lpStrategyProxyAddr);
         lpStrategyImplementation = new LPStrategy();
 
-        // Deploy CleverCvxStrategy proxy
+        // Deploy LPStrategy proxy
         LPSTRATEGY_PROXY = LPStrategy(SIMPLE_PROXY_FACTORY.deployDeterministic(
             _lpStrategyProxySalt,
             address(lpStrategyImplementation),
