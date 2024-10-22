@@ -260,6 +260,9 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
 
     /// @notice distributes the deposited CVX between CLever Strategy and Convex Rewards Pool
     /// @dev If `_swapPercentage > 0` or `_lpPercentage > 0`, must call through a private RPC to avoid getting sandwiched, as totalAssets might spike
+    /// @dev When `_lpPercentage > 0`, the calculated _lpAmount is then subtracted from the total _assets
+    ///      This means that _swapPercentage will be applied to the portion left after assigning the LP assets
+    ///      For example, if LP percentage is 50% and swap percentage is 25%, the final swap amount will be 12.5% in relation to the total
     /// @param _maxCleverDeposit The maximum amount of CVX to deposit into Clever. The remaining will stay idle in this contract
     /// @param _swapPercentage The percentage of `_cleverDeposit` to swap to clevCVX, remaining assets will be deposited to Locker
     /// @param _lpPercentage The percentage of assets to add to the LP. Those assets will sit idle in the CLeverCVXStrategy contract until `swapFurnaceToLP` is called
@@ -339,7 +342,7 @@ contract AfCvx is TrackedAllowances, Ownable, ERC4626Upgradeable, ERC20PermitUpg
         if (_totalRequiredDeposit <= _totalDeposit) {
             _cleverDeposit = _requiredCLeverDeposit;
             _convexDeposit = _requiredConvexDeposit;
-            
+
             // Adjust any remaining amount to ensure all assets are deposited
             uint256 _remainingDeposit = _totalDeposit - _totalRequiredDeposit;
             if (_remainingDeposit > 0) {

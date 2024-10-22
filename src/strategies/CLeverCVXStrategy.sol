@@ -184,7 +184,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
         if (_swapAmount > 0) FURNACE.deposit(Zap.swapCvxToClevCvx(_swapAmount, _minAmountOut));
         if (_lockerAmount > 0) CLEVER_CVX_LOCKER.deposit(_lockerAmount);
 
-        emit Deposited(_assets, _swapAmount, _lockerAmount, _lpAmount);
+        emit Deposited(_swapAmount, _lockerAmount, _lpAmount);
     }
 
     /// @notice Claims all realised CVX from Furnace
@@ -395,7 +395,7 @@ contract CleverCvxStrategy is TrackedAllowances, Ownable, UUPSUpgradeable {
     // ============================================================================================
 
     event OperatorSet(address indexed newOperator);
-    event Deposited(uint256 amount, uint256 swapAmount, uint256 lockerAmount, uint256 lpAmount);
+    event Deposited(uint256 swapAmount, uint256 lockerAmount, uint256 lpAmount);
     event SwapFurnaceToLP(uint256 amountOut);
     event SwapLPToFurnace(uint256 amountOut, bool isCVX);
 
