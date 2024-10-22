@@ -4,6 +4,7 @@ pragma solidity 0.8.25;
 import {SimpleProxyFactory} from "../src/utils/SimpleProxyFactory.sol";
 
 import {CleverCvxStrategy} from "../src/strategies/CleverCvxStrategy.sol";
+import {LPStrategy} from "../src/strategies/LPStrategy.sol";
 
 import {AfCvx} from "../src/AfCvx.sol";
 
@@ -32,38 +33,28 @@ contract DeployAfCvx is Script {
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
 
-        // // Deploy Proxy Factory
-        // SimpleProxyFactory _factory = SimpleProxyFactory(0x156e0382068C3f96a629f51dcF99cEA5250B9eda);
+        // Deploy Proxy Factory
+        SimpleProxyFactory _factory = SimpleProxyFactory(0x156e0382068C3f96a629f51dcF99cEA5250B9eda);
 
-        // // Set salt values
-        // address _deployer = vm.envAddress("DEPLOYER_ADDRESS");
-        // bytes32 _cleverCvxStrategySalt = bytes32(abi.encodePacked(_deployer, uint96(0x01)));
-        // bytes32 _afCvxSalt = bytes32(abi.encodePacked(_deployer, uint96(0x02)));
+        // Set salt values
+        address _deployer = vm.envAddress("DEPLOYER_ADDRESS");
+        bytes32 _lpStrategyProxySalt = bytes32(abi.encodePacked(_deployer, uint96(0x420)));
 
-        // // Sanity check
-        // address cleverCvxStrategyProxyAddr = _factory.predictDeterministicAddress(_cleverCvxStrategySalt);
-        // address afCvxProxyAddr = _factory.predictDeterministicAddress(_afCvxSalt);
-        // require(cleverCvxStrategyProxyAddr != afCvxProxyAddr, "Duplicate address");
+        // Predict proxy addresses
+        address _lpStrategyProxyAddr = _factory.predictDeterministicAddress(_lpStrategyProxySalt);
 
-        // Deploy implementations
-        address _cleverCvxStrategyImplementation = address(new CleverCvxStrategy(AFCVX_PROXY));
-        address _afCvxImplementation = address(new AfCvx(CLEVER_STRATEGY_PROXY));
+        // Deploy implementation contracts
+        address _afCvxImplementation = address(new AfCvx(address(CLEVER_STRATEGY_PROXY)));
+        address _cleverCvxStrategyImplementation = address(new CleverCvxStrategy(address(AFCVX_PROXY), _lpStrategyProxyAddr));
+        address _lpStrategyImplementation = address(new LPStrategy());
 
-        // // Deploy CleverCvxStrategy proxy
-        // address _cleverCvxStrategy = _factory.deployDeterministic(
-        //     _cleverCvxStrategySalt,
-        //     address(_cleverCvxStrategyImplementation),
-        //     abi.encodeCall(CleverCvxStrategy.initialize, (_OWNER, _OPERATOR))
-        // );
-        // require(_cleverCvxStrategy == cleverCvxStrategyProxyAddr, "predicted wrong cleverCvxStrategy proxy address");
-
-        // // Deploy AfCvx proxy
-        // address _afCvx = _factory.deployDeterministic(
-        //     _afCvxSalt,
-        //     _afCvxImplementation,
-        //     abi.encodeCall(AfCvx.initialize, (_OWNER, _OPERATOR, _FEE_COLLECTOR))
-        // );
-        // require(_afCvx == afCvxProxyAddr, "predicted wrong afCvx proxy address");
+        // Deploy LPStrategy proxy
+        address _lpStrategyProxy = address(LPStrategy(_factory.deployDeterministic(
+            _lpStrategyProxySalt,
+            address(_lpStrategyImplementation),
+            abi.encodeWithSignature("initialize(address)", _OWNER)
+        )));
+        require(_lpStrategyProxy == _lpStrategyProxyAddr, "predicted wrong lpStrategyProxyAddr proxy address");
 
         vm.stopBroadcast();
 
@@ -72,10 +63,10 @@ contract DeployAfCvx is Script {
         console.log("Implementation Addresses:");
         console.log("CleverCvxStrategyImplementation: ", _cleverCvxStrategyImplementation);
         console.log("AfCvxImplementation: ", _afCvxImplementation);
-        // console.log("=====================================");
-        // console.log("Proxy Addresses:");
-        // console.log("CleverCvxStrategyProxy: ", _cleverCvxStrategy);
-        // console.log("AfCvxProxy: ", _afCvx);
+        console.log("LPStrategyImplementation: ", _lpStrategyImplementation);
+        console.log("=====================================");
+        console.log("Proxy Addresses:");
+        console.log("LPStrategyProxy: ", _lpStrategyProxy);
         console.log("=====================================");
         console.log("=====================================");
 
@@ -95,9 +86,16 @@ contract DeployAfCvx is Script {
 // CleverCvxStrategyImplementation:  0xD0F77441B70c84aa3366a9F79F2fD16618739aB0
 // AfCvxImplementation:  0x56664FFcCfF6BB282CcA96808AF03d9042e1f799
 // =====================================
+// =====================================
+// Implementation Addresses V4:
+// CleverCvxStrategyImplementation: TODO
+// AfCvxImplementation: TODO
+// LPStrategyImplementation: TODO
+// =====================================
 // Proxy Addresses:
 // CleverCvxStrategyProxy:  0xB828a33aF42ab2e8908DfA8C2470850db7e4Fd2a
 // AfCvxProxy:  0x8668a15b7b023Dc77B372a740FCb8939E15257Cf
+// LPStrategyProxy: TODO
 // =====================================
 // Factory Address:
 // SimpleProxyFactory:  0x156e0382068C3f96a629f51dcF99cEA5250B9eda
