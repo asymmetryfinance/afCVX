@@ -23,7 +23,9 @@ with open('test/afcvx/utils/contract_abi.json', 'r') as abi_file:
 contract = web3.eth.contract(address=contract_address, abi=contract_abi)
 
 # Event name to filter
-event_name = "UnlockRequested"
+# event_name = "UnlockRequested"
+event_name = "UnlockedWithdrawn"
+# emit UnlockedWithdrawn(msg.sender, _receiver, _assets);
 
 # Get the event object
 event = getattr(contract.events, event_name)

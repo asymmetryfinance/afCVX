@@ -87,8 +87,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
 
         uint256[2] memory _amounts;
         _amounts[COIN0] = _cvxAmount;
-        _amounts[COIN1] = _clevCvxAmount
-;
+        _amounts[COIN1] = _clevCvxAmount;
         _amount = LP.add_liquidity(_amounts, _minAmountOut);
         _stake(_amount);
     }

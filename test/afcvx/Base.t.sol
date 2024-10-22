@@ -47,11 +47,11 @@ abstract contract Base is Test {
 
     function setUp() public virtual {
 
-        vm.createSelectFork(
-            vm.envString("ETHEREUM_RPC_URL"), // rpc url
-            20791788 // fork block number
-        );
-        // vm.createSelectFork(vm.envString("ETHEREUM_RPC_URL"));
+        // vm.createSelectFork(
+        //     vm.envString("ETHEREUM_RPC_URL"), // rpc url
+        //     20791788 // fork block number
+        // );
+        vm.createSelectFork(vm.envString("ETHEREUM_RPC_URL"));
 
         // Create user
         user = _createUser("user");
