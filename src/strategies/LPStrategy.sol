@@ -31,7 +31,7 @@ contract LPStrategy is ILPStrategy, TrackedAllowances, Ownable, UUPSUpgradeable 
     ICurvePool public constant LP = ICurvePool(0xF9078Fb962A7D13F55d40d49C8AA6472aBD1A5a6);
 
     IConvexBooster public constant CONVEX_BOOSTER = IConvexBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
-    IConvexRewardsPool public immutable CONVEX_REWARDS = IConvexRewardsPool(0x706f34D0aB8f4f9838F15b0D155C8Ef42229294B);
+    IConvexRewardsPool public constant CONVEX_REWARDS = IConvexRewardsPool(0x706f34D0aB8f4f9838F15b0D155C8Ef42229294B);
 
     // ============================================================================================
     // Constructor
