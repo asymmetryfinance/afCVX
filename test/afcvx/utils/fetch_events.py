@@ -16,14 +16,16 @@ else:
 contract_address = "0x8668a15b7b023Dc77B372a740FCb8939E15257Cf"  # afcvx
 
 # Load the contract ABI from a JSON file
-with open('contract_abi.json', 'r') as abi_file:
+with open('test/afcvx/utils/contract_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Create contract instance
 contract = web3.eth.contract(address=contract_address, abi=contract_abi)
 
 # Event name to filter
-event_name = "UnlockRequested"
+# event_name = "UnlockRequested"
+event_name = "UnlockedWithdrawn"
+# emit UnlockedWithdrawn(msg.sender, _receiver, _assets);
 
 # Get the event object
 event = getattr(contract.events, event_name)
